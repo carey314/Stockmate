@@ -13,6 +13,7 @@ interface ProfitRep {
   cogs: number
   expenses: number
   profit: number
+  lossAmount: number // 报损/过期/损坏的货按进价估的损失（单列，不并入利润口径）
   orderCount: number
   byDay: { date: string; sales: number; profit: number }[]
 }
@@ -167,6 +168,7 @@ export default function ReportsPage() {
                   {stat('销货成本', d.cogs)}
                   {stat('经营支出', d.expenses)}
                   {stat('利润', d.profit, true, d.profit >= 0 ? T.emerald : T.error)}
+                  {d.lossAmount > 0 && stat('损耗（报损/过期）', d.lossAmount, true, T.orange)}
                   {stat('订单数', d.orderCount, false)}
                 </div>
                 {d.byDay.length > 1 && (
