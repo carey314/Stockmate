@@ -1,0 +1,555 @@
+// 多场景进销存 · 数据模型 v2（SKU 规格体系 + 单据体系）
+// 核心分层：
+//   品类(ProductType) → 字段定义(FieldDefinition, scope=product 商品描述 / scope=sku 规格维度)
+//   商品(Product, SPU) → 规格(Sku)：价格/成本/条码/库存都在 SKU 上
+//   无规格维度的商品自动有一个"默认规格"，体验与单品一致
+// 本地开发 SQLite；生产可切 MySQL。JSON 存 String（跨库通用）。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// 店铺（租户）：一个注册者=一家店；所有业务数据都挂 storeId 隔离
+model Store {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+}
+
+model User {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  realName     String
+  phone        String?
+  role         String   @default("staff") // admin | staff
+  status       Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  inventoryRecords InventoryRecord[]
+  orders           Order[]
+  purchaseOrders   PurchaseOrder[]
+  identities       AuthIdentity[]
+
+  @@index([storeId])
+}
+
+/// 第三方登录身份：一个用户可绑多个平台账号（apple / huawei / wechat）
+model AuthIdentity {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  provider    String // apple | huawei | wechat
+  openId      String // 平台的稳定用户标识（apple=sub）
+  email       String?
+  displayName String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([provider, openId])
+  @@index([userId])
+}
+
+/// 品类 / 模板
+model ProductType {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id          Int      @id @default(autoincrement())
+  name        String
+  icon        String?
+  description String?
+  isPreset    Int      @default(0)
+  sortOrder   Int      @default(0)
+  isDeleted   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  fields   FieldDefinition[]
+  products Product[]
+
+  @@index([storeId])
+}
+
+/// 字段定义：scope=product 商品描述字段（品牌/产地）；scope=sku 规格维度（度数/容量/包装）
+model FieldDefinition {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id            Int     @id @default(autoincrement())
+  productTypeId Int
+  key           String
+  label         String
+  type          String  @default("text") // text | number | select | date | boolean
+  scope         String  @default("product") // product | sku
+  options       String? // select 选项，JSON 数组字符串
+  unit          String?
+  required      Int     @default(0)
+  isCore        Int     @default(0)
+  /// 仅 scope=sku 有意义：0=不产生库存规格（温度/糖度这类"点单选项"），批量生成规格时跳过。
+  /// 奶茶店 3 杯型×3温度×5糖度 = 45 个SKU 是灾难；真正要库存的只有杯型 3 个。
+  affectsStock  Int     @default(1)
+  /// 1=商品列表副标题里显示这个字段值（药店靠"厂家"区分同名药）
+  showInList    Int     @default(0)
+  sortOrder     Int     @default(0)
+
+  productType ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([productTypeId, key])
+  @@index([productTypeId])
+
+  @@index([storeId])
+}
+
+/// 商品（SPU）：名字 + 描述字段；可售卖的实体是下面的 Sku
+model Product {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id            Int      @id @default(autoincrement())
+  code          String
+  name          String
+  productTypeId Int
+  unit          String   @default("件")
+  defaultPrice  Float    @default(0) // 兼容保留：默认规格售价
+  costPrice     Float?
+  barcode       String?
+  imageUrl      String?
+  customFields  String   @default("{}") // scope=product 的字段值
+  status        Int      @default(1)
+  isDeleted     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  productType      ProductType       @relation(fields: [productTypeId], references: [id])
+  skus             Sku[]
+  inventoryRecords InventoryRecord[]
+  pricingRules     PricingRule[]
+  orderItems       OrderItem[]
+
+  @@index([productTypeId])
+  @@index([name])
+
+  @@index([storeId])
+  @@unique([storeId, code])
+}
+
+/// 规格（SKU）：同一商品的不同规格，各自独立 价格/成本/条码/库存
+model Sku {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  code       String // 扫码用（默认规格沿用商品 code）
+  specValues String   @default("{}") // {容量:"500ml",度数:"53%vol"}（scope=sku 字段值）
+  specText   String   @default("") // 冗余展示："500ml · 53度"
+  price      Float    @default(0)
+  costPrice  Float?
+  barcode    String?
+  imageUrl   String? // 规格图（同款不同色时每色一张；无则回退商品图）
+  isDefault  Int      @default(0)
+  status     Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product            Product             @relation(fields: [productId], references: [id])
+  inventory          Inventory?
+  inventoryRecords   InventoryRecord[]
+  orderItems         OrderItem[]
+  pricingRules       PricingRule[]
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@index([productId])
+  @@index([barcode])
+
+  @@index([storeId])
+  @@unique([storeId, code])
+}
+
+/// 库存：每个 SKU 一条（skuId 迁移期可空，回填后即视为必填；productId 保留便于按商品聚合）
+model Inventory {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  skuId       Int?     @unique
+  quantity    Float    @default(0) // 支持散称：0.5斤/1.5kg
+  minQuantity Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  sku Sku? @relation(fields: [skuId], references: [id])
+
+  @@index([productId])
+
+  @@index([storeId])
+}
+
+model InventoryRecord {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id                      Int      @id @default(autoincrement())
+  productId               Int
+  skuId                   Int?
+  type                    String // inbound | outbound
+  quantity                Float
+  beforeQuantity          Float
+  afterQuantity           Float
+  reason                  String?
+  relatedOrderId          Int?
+  relatedPurchaseOrderId  Int?
+  operatorId              Int
+  createdAt               DateTime @default(now())
+
+  product       Product        @relation(fields: [productId], references: [id])
+  sku           Sku?           @relation(fields: [skuId], references: [id])
+  order         Order?         @relation(fields: [relatedOrderId], references: [id])
+  purchaseOrder PurchaseOrder? @relation(fields: [relatedPurchaseOrderId], references: [id])
+  operator      User           @relation(fields: [operatorId], references: [id])
+
+  @@index([productId])
+  @@index([skuId])
+  @@index([type])
+  @@index([createdAt])
+
+  @@index([storeId])
+}
+
+model Customer {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id            Int      @id @default(autoincrement())
+  name          String
+  contactPerson String?
+  phone         String?
+  address       String?
+  notes         String?
+  productTypeId Int? // 主营品类
+  isDeleted     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  pricingRules PricingRule[]
+  orders       Order[]
+
+  @@index([name])
+
+  @@index([storeId])
+}
+
+/// 供应商（进货单用）
+model Supplier {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id            Int      @id @default(autoincrement())
+  name          String
+  contactPerson String?
+  phone         String?
+  address       String?
+  notes         String?
+  isDeleted     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+
+  @@index([name])
+
+  @@index([storeId])
+}
+
+/// 客户专属价：落到 SKU
+model PricingRule {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  skuId      Int?
+  customerId Int
+  price      Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product  Product  @relation(fields: [productId], references: [id])
+  sku      Sku?     @relation(fields: [skuId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([skuId, customerId])
+  @@index([customerId])
+
+  @@index([storeId])
+}
+
+/// 销售单：完整单据字段（折扣/实付/欠款/结算账户/打印）
+model Order {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id                Int       @id @default(autoincrement())
+  orderNo           String
+  customerId        Int
+  status            String    @default("completed") // draft | completed | cancelled
+  totalAmount       Float     @default(0) // 原价合计
+  discountRate      Float? // 折扣率（如 95 = 95折，null=无）
+  discountAmount    Float     @default(0) // 折扣金额
+  actualAmount      Float     @default(0) // 实付应收 = total - discount
+  paidAmount        Float     @default(0) // 已收款
+  settlementAccount String? // 结算账户：现金/微信/支付宝/银行卡/挂账
+  notes             String?
+  printedAt         DateTime? // 最近打印时间
+  operatorId        Int
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  operator         User              @relation(fields: [operatorId], references: [id])
+  items            OrderItem[]
+  inventoryRecords InventoryRecord[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+
+  @@index([storeId])
+  @@unique([storeId, orderNo])
+}
+
+model OrderItem {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id          Int     @id @default(autoincrement())
+  orderId     Int
+  productId   Int
+  skuId       Int?
+  productName String
+  specText    String? // 规格快照："500ml · 53度"
+  quantity    Float
+  returnedQty Float   @default(0) // 已退数量（防超退）
+  unitPrice   Float
+  /// 卖出那一刻的成本快照。不存快照的话，进价一变，历史订单的利润会被追溯改写——
+  /// 上个月明明赚了钱，这个月供应商涨价，报表里上个月就变亏了。
+  /// null = 当时确实没有成本数据（报表要如实标出，不能当 0 混进毛利）
+  costSnapshot Float?
+  subtotal    Float
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+  sku     Sku?    @relation(fields: [skuId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+
+  @@index([storeId])
+}
+
+/// 进货单：供应商 + 明细 + 折扣/实付/欠款/结算账户
+model PurchaseOrder {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id                Int       @id @default(autoincrement())
+  orderNo           String // PO20260802001
+  supplierId        Int?
+  status            String    @default("completed") // completed | cancelled
+  totalAmount       Float     @default(0)
+  discountRate      Float?
+  discountAmount    Float     @default(0)
+  actualAmount      Float     @default(0) // 实付应付
+  paidAmount        Float     @default(0) // 已付款（未付=actual-paid，即欠供应商）
+  settlementAccount String?
+  notes             String?
+  printedAt         DateTime?
+  operatorId        Int
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  supplier         Supplier?           @relation(fields: [supplierId], references: [id])
+  operator         User                @relation(fields: [operatorId], references: [id])
+  items            PurchaseOrderItem[]
+  inventoryRecords InventoryRecord[]
+
+  @@index([supplierId])
+  @@index([createdAt])
+
+  @@index([storeId])
+  @@unique([storeId, orderNo])
+}
+
+model PurchaseOrderItem {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id              Int     @id @default(autoincrement())
+  purchaseOrderId Int
+  skuId           Int
+  productName     String
+  specText        String?
+  quantity        Float
+  returnedQty     Float   @default(0) // 已退给供应商的数量
+  unitPrice       Float // 进价
+  subtotal        Float
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  sku           Sku           @relation(fields: [skuId], references: [id])
+
+  @@index([purchaseOrderId])
+
+  @@index([storeId])
+}
+
+/// 盘点单：一次盘点提交即完成，盘盈亏差异直接落库存并留出入库流水
+model Stocktake {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id            Int      @id @default(autoincrement())
+  orderNo       String // PD20260803001
+  productTypeId Int? // 盘点范围（null=全部品类）
+  totalItems    Int      @default(0) // 实盘 SKU 数
+  diffItems     Int      @default(0) // 有出入的 SKU 数
+  gainQty       Float    @default(0) // 盘盈总数
+  lossQty       Float    @default(0) // 盘亏总数
+  notes         String?
+  operatorId    Int
+  createdAt     DateTime @default(now())
+
+  items StocktakeItem[]
+
+  @@index([createdAt])
+
+  @@index([storeId])
+  @@unique([storeId, orderNo])
+}
+
+model StocktakeItem {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id          Int     @id @default(autoincrement())
+  stocktakeId Int
+  skuId       Int
+  productName String
+  specText    String?
+  systemQty   Float // 盘点时账面库存
+  actualQty   Float // 实盘数量
+  diff        Float // actual - system（正=盘盈 负=盘亏）
+
+  stocktake Stocktake @relation(fields: [stocktakeId], references: [id])
+
+  @@index([stocktakeId])
+
+  @@index([storeId])
+}
+
+/// 店铺级设置（店名等，与个人资料分离——员工开单票据抬头也要是店名）
+model Setting {
+  storeId Int    @default(1) // 租户隔离
+  key     String
+  value   String
+
+  @@id([storeId, key])
+}
+
+/// 收付款流水：每一笔钱的进出都有独立时间戳（开单初收/补收欠款/进货付款/补付货款）
+model PaymentRecord {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id              Int      @id @default(autoincrement())
+  direction       String // in=收款 | out=付款
+  amount          Float
+  account         String? // 现金/微信/支付宝/银行卡
+  orderId         Int? // 关联销售单
+  purchaseOrderId Int? // 关联进货单
+  customerId      Int?
+  supplierId      Int?
+  note            String?
+  paidAt          DateTime @default(now())
+  operatorId      Int
+  createdAt       DateTime @default(now())
+
+  @@index([paidAt])
+  @@index([orderId])
+  @@index([customerId])
+
+  @@index([storeId])
+}
+
+/// 收入流水：不关联库存的卖出（口述"卖了X"但商品未建档时只记收入）
+model Income {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id         Int      @id @default(autoincrement())
+  source     String // 来源描述，如"口述卖出·煎饼"
+  amount     Float
+  note       String?
+  incomeDate DateTime @default(now())
+  operatorId Int
+  createdAt  DateTime @default(now())
+
+  @@index([incomeDate])
+
+  @@index([storeId])
+}
+
+/// 经营支出（口述记账的非商品开销）
+model Expense {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id          Int      @id @default(autoincrement())
+  category    String
+  amount      Float
+  note        String?
+  expenseDate DateTime @default(now())
+  operatorId  Int
+  createdAt   DateTime @default(now())
+
+  @@index([expenseDate])
+  @@index([category])
+
+  @@index([storeId])
+}
+
+/// 一级配方：卖 1 份 ownerSku 自动扣掉各 component 的用量。
+/// 只做一级（成品→原料），多级 BOM 是 ERP 的事，明确不做。
+model Recipe {
+  storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
+  id             Int   @id @default(autoincrement())
+  ownerSkuId     Int // 成品 SKU（有配方的 SKU 自身不追库存）
+  componentSkuId Int // 原料 SKU
+  qty            Float // 每份用量（单位随原料 SKU 的商品单位）
+
+  @@unique([ownerSkuId, componentSkuId])
+  @@index([ownerSkuId])
+
+  @@index([storeId])
+}
+
+/// 客户端崩溃/错误上报（运维数据，不做租户隔离；只存报错本身，不存任何经营数据）
+/// 刻意不接第三方 SDK：那会引入行为追踪、还得改隐私标签，与"不做画像追踪"的承诺冲突
+model ClientLog {
+  id         Int      @id @default(autoincrement())
+  level      String // flutter | platform | zone | manual
+  message    String
+  stack      String?
+  platform   String? // ios | android
+  appVersion String?
+  userId     Int?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// 权益（订阅）——**刻意与支付渠道解耦**。
+/// 服务端只回答一件事："这家店现在有没有权益、到什么时候为止"；
+/// 钱是从苹果内购、官网支付宝、还是安卓商店进来的，只是 source 字段的差别。
+/// 反过来把订阅状态和某个渠道的交易号绑死，将来上第二个渠道就要迁移数据——那时已经有真实付费用户了。
+model Entitlement {
+  id         Int       @id @default(autoincrement())
+  storeId    Int // 权益挂在店铺上（一个账号=一家店），不是挂在设备或某次交易上
+  plan       String // free | pro（档位名，不含价格——定价是渠道的事）
+  source     String // apple | web | android | manual（manual=人工发放/内测/补偿）
+  status     String    @default("active") // active | expired | refunded | canceled
+  externalId String? // 渠道侧的凭证标识：苹果 originalTransactionId / 官网订单号
+  startedAt  DateTime  @default(now())
+  expiresAt  DateTime? // null = 永久（人工发放的内测权益）
+  note       String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([storeId, status])
+  @@unique([source, externalId])
+}
+
+/// AI 用量流水（按店按天累计）。
+/// 现在只记不拦——将来要按量计费或设免费额度，数据已经躺在这儿了，
+/// 不用等攒够历史数据才能定价。
+model AiUsage {
+  id      Int    @id @default(autoincrement())
+  storeId Int
+  day     String // 本地时区的 YYYY-MM-DD（不能用 UTC，早市 6 点会记到前一天）
+  calls   Int    @default(0)
+  endpoint String // 哪个 AI 环节用得多，定价时要看这个
+
+  @@unique([storeId, day, endpoint])
+  @@index([storeId, day])
+}

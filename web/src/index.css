@@ -1,0 +1,89 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f9f9ff;
+  font-family: Manrope, -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', Roboto,
+    'Helvetica Neue', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 原型规格：6px 细滚动条，thumb #d8e3fb 圆角，hover #b9c8de */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #d8e3fb;
+  border-radius: 10px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #b9c8de;
+}
+
+/* A4 打印：只留对账单主体，隐藏应用壳（导航/顶栏/右栏/工具行） */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute !important;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* AI 回答加载中的三点动画 */
+.ai-dots {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px 2px;
+}
+.ai-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #4648d4;
+  opacity: 0.35;
+  animation: ai-dot-bounce 1.2s infinite ease-in-out;
+}
+.ai-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.ai-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes ai-dot-bounce {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}

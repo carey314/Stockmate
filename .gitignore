@@ -1,0 +1,40 @@
+# ===== 依赖（web 104M + server 9.7G，绝不进仓库）=====
+**/node_modules/
+
+# ===== 敏感（含 DEEPSEEK_API_KEY / JWT_SECRET，泄露=事故）=====
+**/.env
+**/.env.local
+**/.env.*.local
+
+# ===== 本地数据库 + 备份（含真实/测试数据）=====
+server/prisma/*.db
+server/prisma/*.db-journal
+server/prisma/*.db-wal
+server/prisma/*.db-shm
+server/prisma/*.bak-*
+server/prisma/*.bak
+
+# ===== 用户上传的商品图 =====
+server/uploads/
+
+# ===== 构建产物 =====
+web/dist/
+web/dist-ssr/
+app/build/
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/ios/Pods/
+app/ios/.symlinks/
+
+# ===== 日志 / 系统 / 编辑器 / 工具 =====
+*.log
+.DS_Store
+.vscode/
+.idea/
+.gstack/
+*.local
+
+# ===== 临时/草稿 =====
+scratchpad/
+tmp/
