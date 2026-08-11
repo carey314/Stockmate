@@ -51,6 +51,7 @@ interface PriceRule {
   skuId: number | null
   price: number
   product: { name: string; unit: string } | null
+  sku: { specText: string | null } | null
 }
 interface SkuOpt {
   skuId: number
@@ -319,7 +320,8 @@ export default function PartnersPage() {
               {c.prices.map((r) => (
                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
                   <span>
-                    {r.product?.name ?? '—'} · <b>{fmtMoney(r.price)}</b>/{r.product?.unit ?? '件'}
+                    {r.product?.name ?? '—'}
+                    {r.sku?.specText ? `（${r.sku.specText}）` : ''} · <b>{fmtMoney(r.price)}</b>/{r.product?.unit ?? '件'}
                   </span>
                   <Popconfirm title="删除这条专属价？" onConfirm={() => delPrice(p.id, r.id)}>
                     <Button size="small" type="text" danger icon={<DeleteOutlined />} style={{ padding: '0 4px', height: 20 }} />

@@ -136,6 +136,11 @@ exports.list = async (req, res) => {
         }
       : {}),
   };
+  // 只看欠供应商：下推进 where（对齐 orders.list），否则「取完当页再 filter」会让 total 和实际条数对不上
+  if (unpaidOnly === '1') {
+    where.status = 'completed';
+    where.NOT = { paidAmount: { equals: prisma.purchaseOrder.fields.actualAmount } };
+  }
   const [total, listRaw] = await Promise.all([
     prisma.purchaseOrder.count({ where }),
     prisma.purchaseOrder.findMany({
@@ -146,8 +151,7 @@ exports.list = async (req, res) => {
       take: Number(pageSize),
     }),
   ]);
-  let list = listRaw.map((o) => ({ ...o, unpaidAmount: Math.round((o.actualAmount - o.paidAmount) * 100) / 100 }));
-  if (unpaidOnly === '1') list = list.filter((o) => o.status === 'completed' && o.unpaidAmount > 0);
+  const list = listRaw.map((o) => ({ ...o, unpaidAmount: Math.round((o.actualAmount - o.paidAmount) * 100) / 100 }));
   return ok(res, {
     list,
     pagination: { page: Number(page), pageSize: Number(pageSize), total, totalPages: Math.ceil(total / Number(pageSize)) },

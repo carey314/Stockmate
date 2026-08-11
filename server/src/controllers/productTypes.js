@@ -113,6 +113,10 @@ exports.addField = async (req, res) => {
       options: f.options ? JSON.stringify(f.options) : null,
       unit: f.unit ?? null,
       required: f.required ? 1 : 0,
+      // 必须显式持久化：漏了会走 DB 默认 affectsStock=1，把"温度/糖度"这类不占库存的
+      // 规格维度重置成产生库存（编辑品类=删旧全量重建，每次都会踩）
+      affectsStock: f.affectsStock === false ? 0 : 1,
+      showInList: f.showInList === true ? 1 : 0,
       isCore: f.isCore ? 1 : 0,
       sortOrder: f.sortOrder,
     },
@@ -127,6 +131,9 @@ exports.updateField = async (req, res) => {
   if (f.options !== undefined) data.options = f.options ? JSON.stringify(f.options) : null;
   if (f.required !== undefined) data.required = f.required ? 1 : 0;
   if (f.isCore !== undefined) data.isCore = f.isCore ? 1 : 0;
+  // boolean → Int(0/1) 归一，否则写进 Int 列行为不确定
+  if (f.affectsStock !== undefined) data.affectsStock = f.affectsStock ? 1 : 0;
+  if (f.showInList !== undefined) data.showInList = f.showInList ? 1 : 0;
   const owned = await prisma.fieldDefinition.findFirst({ where: { id: fieldId } }); // 本店归属校验
   if (!owned) throw httpError(404, '字段不存在');
   const field = await prisma.fieldDefinition.update({ where: { id: fieldId }, data });

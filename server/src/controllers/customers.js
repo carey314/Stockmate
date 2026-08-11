@@ -89,7 +89,10 @@ exports.prices = async (req, res) => {
   const customerId = Number(req.params.id);
   const rules = await prisma.pricingRule.findMany({
     where: { customerId },
-    include: { product: { select: { id: true, name: true, code: true, defaultPrice: true, unit: true } } },
+    include: {
+      product: { select: { id: true, name: true, code: true, defaultPrice: true, unit: true } },
+      sku: { select: { specText: true } }, // 同商品多规格各设专属价时，前端要能区分是哪个规格
+    },
   });
   return ok(res, rules);
 };
