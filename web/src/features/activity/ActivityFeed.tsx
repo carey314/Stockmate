@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import api from '../../api/client'
 import { fmtMoney, fmtQty, fmtTime } from '../../lib/format'
 import { T } from '../../theme'
+import { t } from '../../lib/i18n'
 
 interface InvRecord {
   id: number
@@ -118,7 +119,7 @@ export default function ActivityFeed() {
         }}
       >
         <Typography.Text strong style={{ fontSize: 17 }}>
-          最近动态
+          {t('最近动态', 'Recent Activity')}
         </Typography.Text>
         <Button
           size="small"

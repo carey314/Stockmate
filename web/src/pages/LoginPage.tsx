@@ -3,6 +3,8 @@ import { App, Button, Card, Form, Input, Typography } from 'antd'
 import { LockOutlined, UserOutlined } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { T, primaryRgba } from '../theme'
+import { t } from '../lib/i18n'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -38,7 +40,7 @@ export default function LoginPage() {
         style={{
           width: 400,
           borderRadius: 24,
-          boxShadow: '0 12px 40px rgba(70, 72, 212, 0.12)',
+          boxShadow: `0 12px 40px ${primaryRgba(0.12)}`,
         }}
         styles={{ body: { padding: '40px 36px' } }}
       >
@@ -49,7 +51,7 @@ export default function LoginPage() {
               height: 56,
               margin: '0 auto 12px',
               borderRadius: 16,
-              background: 'linear-gradient(135deg, #4648d4, #6063ee)',
+              background: `linear-gradient(135deg, ${T.primary}, ${T.primaryContainer})`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -61,24 +63,30 @@ export default function LoginPage() {
             智
           </div>
           <Typography.Title level={3} style={{ margin: 0, fontWeight: 700 }}>
-            智存管理后台
+            {t('智存管理后台', 'StockMate Admin')}
           </Typography.Title>
-          <Typography.Text type="secondary">StockMate · 老板在电脑上把账管明白</Typography.Text>
+          <Typography.Text type="secondary">
+            {t('StockMate · 老板在电脑上把账管明白', 'Run your books clearly, on a real screen')}
+          </Typography.Text>
         </div>
         <Form onFinish={onFinish} size="large" requiredMark={false}>
-          <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]}>
-            <Input prefix={<UserOutlined />} placeholder="用户名（与手机 App 同账号）" autoFocus />
+          <Form.Item name="username" rules={[{ required: true, message: t('请输入用户名', 'Enter username') }]}>
+            <Input
+              prefix={<UserOutlined />}
+              placeholder={t('用户名（与手机 App 同账号）', 'Username (same as mobile app)')}
+              autoFocus
+            />
           </Form.Item>
-          <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
-            <Input.Password prefix={<LockOutlined />} placeholder="密码" />
+          <Form.Item name="password" rules={[{ required: true, message: t('请输入密码', 'Enter password') }]}>
+            <Input.Password prefix={<LockOutlined />} placeholder={t('密码', 'Password')} />
           </Form.Item>
           <Form.Item style={{ marginBottom: 8 }}>
             <Button type="primary" htmlType="submit" block loading={loading} style={{ borderRadius: 999 }}>
-              登 录
+              {t('登 录', 'Sign in')}
             </Button>
           </Form.Item>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            账号与手机 App 通用，暂不支持在网页注册。
+            {t('账号与手机 App 通用，暂不支持在网页注册。', 'Accounts are shared with the mobile app. Sign-up is app-only for now.')}
           </Typography.Text>
         </Form>
       </Card>

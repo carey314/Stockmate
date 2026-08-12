@@ -2,7 +2,7 @@ import { Empty, Spin, Typography } from 'antd'
 import { useEffect, useRef } from 'react'
 import echarts, { graphic } from '../lib/echarts'
 import type { ECharts } from 'echarts/core'
-import { T, cardStyle } from '../theme'
+import { T, cardStyle, primaryRgba } from '../theme'
 
 export interface SalesPoint {
   date: string // 服务端 UTC 日字符串，直接展示不做时区换算
@@ -96,8 +96,8 @@ export default function SalesTrendChart({
           emphasis: { itemStyle: { color: '#fff', borderColor: T.primary, borderWidth: 3 } },
           areaStyle: {
             color: new graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(70, 72, 212, 0.10)' },
-              { offset: 1, color: 'rgba(70, 72, 212, 0)' },
+              { offset: 0, color: primaryRgba(0.1) },
+              { offset: 1, color: primaryRgba(0) },
             ]),
           },
         },

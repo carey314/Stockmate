@@ -3,6 +3,7 @@ import { ClearOutlined, SendOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import api from '../../api/client'
 import { T } from '../../theme'
+import { t } from '../../lib/i18n'
 
 interface Msg {
   role: 'user' | 'assistant'
@@ -77,7 +78,7 @@ export default function AiChatPanel() {
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}
       >
         <Typography.Text strong style={{ fontSize: 17 }}>
-          ✨ AI 问生意
+          ✨ {t('AI 问生意', 'Ask AI')}
         </Typography.Text>
         {msgs.length > 0 && (
           <Button

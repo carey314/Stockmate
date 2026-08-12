@@ -14,9 +14,12 @@ import {
 import { KeyOutlined, UserAddOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useState } from 'react'
 import dayjs from 'dayjs'
+import { CheckOutlined } from '@ant-design/icons'
+import { Segmented } from 'antd'
 import api from '../api/client'
 import { useAuth } from '../auth'
-import { T, cardStyle } from '../theme'
+import { T, cardStyle, THEME_PRESETS, activeTheme, setThemePreset } from '../theme'
+import { LANG, setLang, t } from '../lib/i18n'
 
 interface UserRow {
   id: number
@@ -274,6 +277,73 @@ export default function SettingsPage() {
           />
         </Section>
       )}
+
+      {/* 外观与语言：全员可用，只存本机浏览器（localStorage），不影响别的设备/同事 */}
+      <Section
+        title={t('外观与语言', 'Appearance & Language')}
+        desc={t('只影响这台电脑的浏览器，不影响手机 App 和其他同事', 'Saved in this browser only; does not affect the mobile app or teammates')}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 12.5, display: 'block', marginBottom: 10 }}>
+              {t('主题色', 'Theme color')}
+            </Typography.Text>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              {THEME_PRESETS.map((p) => {
+                const active = p.key === activeTheme.key
+                return (
+                  <div
+                    key={p.key}
+                    onClick={() => !active && setThemePreset(p.key)}
+                    style={{ textAlign: 'center', cursor: active ? 'default' : 'pointer', width: 64 }}
+                  >
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        margin: '0 auto',
+                        borderRadius: 999,
+                        background: `linear-gradient(135deg, ${p.primary}, ${p.primaryContainer})`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontSize: 16,
+                        border: active ? `3px solid ${T.onSurface}` : '3px solid transparent',
+                        boxShadow: `0 4px 12px ${p.primary}40`,
+                      }}
+                    >
+                      {active && <CheckOutlined />}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: T.secondary, marginTop: 6 }}>
+                      {t(p.name, p.nameEn)}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 12.5, display: 'block', marginBottom: 10 }}>
+              {t('界面语言', 'Language')}
+            </Typography.Text>
+            <Segmented
+              value={LANG}
+              onChange={(v) => v !== LANG && setLang(v as 'zh' | 'en')}
+              options={[
+                { label: '简体中文', value: 'zh' },
+                { label: 'English', value: 'en' },
+              ]}
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginTop: 8 }}>
+              {t(
+                '目前覆盖导航与通用界面，业务页面的中文文案在逐步翻译中。',
+                'Navigation and shared UI are translated; business pages are being translated gradually.',
+              )}
+            </Typography.Text>
+          </div>
+        </div>
+      </Section>
 
       <Section title="修改我的密码" desc="改完下次登录生效，当前登录不受影响">
         <Form form={pwdForm} layout="inline">

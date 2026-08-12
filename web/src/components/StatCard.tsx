@@ -22,7 +22,7 @@ export default function StatCard({
   const up = (trend ?? 0) > 0
   const flat = trend === 0
   return (
-    <div style={{ ...cardStyle, padding: '22px 24px' }}>
+    <div style={{ ...cardStyle, padding: '22px 24px', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <div
           style={{
@@ -42,7 +42,8 @@ export default function StatCard({
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: T.secondary, marginBottom: 4 }}>{title}</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+          {/* flexWrap：宽卡时数字+趋势同行（原型形态），窄卡时趋势换到第二行，绝不溢出卡外 */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap', rowGap: 0 }}>
             <span
               style={{
                 fontSize: 24,

@@ -11,6 +11,7 @@ import dayjs from 'dayjs'
 import api from '../api/client'
 import { useAuth } from '../auth'
 import { T } from '../theme'
+import { dateFormat, t } from '../lib/i18n'
 
 export default function TopBar({
   title,
@@ -34,10 +35,10 @@ export default function TopBar({
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
-      a.download = `智存全量导出_${dayjs().format('YYYYMMDD_HHmm')}.json`
+      a.download = `${t('智存全量导出', 'stockmate_export')}_${dayjs().format('YYYYMMDD_HHmm')}.json`
       a.click()
       URL.revokeObjectURL(a.href)
-      message.success('已导出全部数据（JSON）')
+      message.success(t('已导出全部数据（JSON）', 'All data exported (JSON)'))
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -89,10 +90,15 @@ export default function TopBar({
           }}
         >
           <CalendarOutlined style={{ color: T.secondary }} />
-          {dayjs().format('YYYY年M月D日')}
+          {dayjs().format(dateFormat)}
         </div>
         {onOpenPanel && (
-          <Button shape="circle" icon={<BellOutlined />} onClick={onOpenPanel} title="动态与 AI 助手" />
+          <Button
+            shape="circle"
+            icon={<BellOutlined />}
+            onClick={onOpenPanel}
+            title={t('动态与 AI 助手', 'Activity & AI assistant')}
+          />
         )}
         {isAdmin && (
           <Button
@@ -102,12 +108,12 @@ export default function TopBar({
             onClick={onExport}
             style={{ fontWeight: 600 }}
           >
-            导出数据
+            {t('导出数据', 'Export')}
           </Button>
         )}
         <Dropdown
           menu={{
-            items: [{ key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: onLogout }],
+            items: [{ key: 'logout', icon: <LogoutOutlined />, label: t('退出登录', 'Sign out'), onClick: onLogout }],
           }}
         >
           <div
@@ -129,7 +135,7 @@ export default function TopBar({
               color={isAdmin ? 'purple' : 'default'}
               style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: 11 }}
             >
-              {isAdmin ? '老板' : '员工'}
+              {isAdmin ? t('老板', 'Owner') : t('员工', 'Staff')}
             </Tag>
           </div>
         </Dropdown>

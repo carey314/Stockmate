@@ -19,7 +19,8 @@ import {
   TeamOutlined,
 } from '@ant-design/icons'
 import { useState } from 'react'
-import { T } from '../theme'
+import { T, primaryRgba } from '../theme'
+import { t } from '../lib/i18n'
 
 export interface NavItem {
   key: string
@@ -31,22 +32,22 @@ export interface NavItem {
 // 权限显隐的唯一清单（后端接口本身也有 adminOnly 守卫兜底）。
 // 报表大屏对 staff 可见——里面按卡片级隐藏利润/资金流水/员工业绩（与 App 报表中心一致）。
 export const NAV: NavItem[] = [
-  { key: '/', icon: <HomeOutlined />, label: '工作台' },
-  { key: '/todo', icon: <BellOutlined />, label: '待办' },
-  { key: '/products', icon: <AppstoreOutlined />, label: '商品管理' },
-  { key: '/types', icon: <TagsOutlined />, label: '品类管理' },
-  { key: '/partners', icon: <TeamOutlined />, label: '往来单位' },
-  { key: '/orders', icon: <ProfileOutlined />, label: '订单管理' },
-  { key: '/purchase', icon: <InboxOutlined />, label: '进货管理' },
-  { key: '/stocktake', icon: <AuditOutlined />, label: '盘点' },
-  { key: '/ledger', icon: <AccountBookOutlined />, label: '收支记账' },
-  { key: '/quick-entry', icon: <ThunderboltOutlined />, label: '文本记账' },
-  { key: '/reports', icon: <BarChartOutlined />, label: '报表大屏' },
+  { key: '/', icon: <HomeOutlined />, label: t('工作台', 'Dashboard') },
+  { key: '/todo', icon: <BellOutlined />, label: t('待办', 'To-dos') },
+  { key: '/products', icon: <AppstoreOutlined />, label: t('商品管理', 'Products') },
+  { key: '/types', icon: <TagsOutlined />, label: t('品类管理', 'Categories') },
+  { key: '/partners', icon: <TeamOutlined />, label: t('往来单位', 'Partners') },
+  { key: '/orders', icon: <ProfileOutlined />, label: t('订单管理', 'Orders') },
+  { key: '/purchase', icon: <InboxOutlined />, label: t('进货管理', 'Purchasing') },
+  { key: '/stocktake', icon: <AuditOutlined />, label: t('盘点', 'Stocktake') },
+  { key: '/ledger', icon: <AccountBookOutlined />, label: t('收支记账', 'Ledger') },
+  { key: '/quick-entry', icon: <ThunderboltOutlined />, label: t('文本记账', 'Quick Entry') },
+  { key: '/reports', icon: <BarChartOutlined />, label: t('报表大屏', 'Reports') },
   // 收益日历=现金口径的钱进钱出，只给老板看（与 App 侧同权限；staff 连菜单都不渲染，接口 adminOnly 兜底）
-  { key: '/calendar', icon: <CalendarOutlined />, label: '收益日历', adminOnly: true },
-  { key: '/statements', icon: <FileTextOutlined />, label: '对账单' },
-  { key: '/import', icon: <ImportOutlined />, label: '批量导入' },
-  { key: '/settings', icon: <SettingOutlined />, label: '设置' },
+  { key: '/calendar', icon: <CalendarOutlined />, label: t('收益日历', 'Cash Calendar'), adminOnly: true },
+  { key: '/statements', icon: <FileTextOutlined />, label: t('对账单', 'Statements') },
+  { key: '/import', icon: <ImportOutlined />, label: t('批量导入', 'Import') },
+  { key: '/settings', icon: <SettingOutlined />, label: t('设置', 'Settings') },
 ]
 
 // 原型规格：项自身 borderLeft 4px（未激活 transparent 占位防横跳）+ 32px 药丸 + 激活 8% 靛蓝底
@@ -69,7 +70,7 @@ function NavLink({ item, active, onClick }: { item: NavItem; active: boolean; on
         fontWeight: active ? 700 : 600,
         fontSize: 13,
         letterSpacing: '0.02em',
-        background: active ? 'rgba(96, 99, 238, 0.10)' : hover ? T.surfaceContainerLow : 'transparent',
+        background: active ? primaryRgba(0.1) : hover ? T.surfaceContainerLow : 'transparent',
         transition: 'background .2s, color .2s',
       }}
     >
@@ -125,9 +126,11 @@ export default function SideNav({
         </div>
         <div>
           <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: '-0.01em', color: T.primary }}>
-            智存后台
+            {t('智存后台', 'StockMate Admin')}
           </div>
-          <Typography.Text style={{ fontSize: 12, color: T.secondary }}>AI 原生进销存</Typography.Text>
+          <Typography.Text style={{ fontSize: 12, color: T.secondary }}>
+            {t('AI 原生进销存', 'AI-native inventory')}
+          </Typography.Text>
         </div>
       </div>
       <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -153,7 +156,7 @@ export default function SideNav({
           }}
         >
           <QuestionCircleOutlined style={{ fontSize: 17 }} />
-          帮助中心
+          {t('帮助中心', 'Help Center')}
         </div>
         <div
           onClick={onLogout}
@@ -172,7 +175,7 @@ export default function SideNav({
           }}
         >
           <LogoutOutlined style={{ fontSize: 17 }} />
-          退出登录
+          {t('退出登录', 'Sign out')}
         </div>
       </div>
     </aside>

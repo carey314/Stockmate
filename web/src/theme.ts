@@ -4,10 +4,44 @@ import type { CSSProperties } from 'react'
 // 设计令牌事实源：~/Downloads/browser/stitch_smart_ai_inventory_hub 2/aetheric_dashboard/DESIGN.md
 // 圆角口径（定死，模块 2-5 沿用）：卡片 24 / 导航项 32 药丸 / 小控件 12 / 按钮 999。
 // 原型源码的 rounded-xl=48px 是 Tailwind config 覆写陷阱，官方散文口径是 24px 卡。
+
+// ===== 主题色预设 =====
+// 换主题 = localStorage 存 key + reload：全项目内联样式都引 T，加载时替换一次即全局生效，
+// 不需要把几百处内联样式改成 CSS 变量/Context（改造面与收益完全不成比例）。
+export interface ThemePreset {
+  key: string
+  name: string
+  nameEn: string
+  primary: string
+  primaryContainer: string
+  primaryFixed: string
+  rgb: string // 'r, g, b'，供阴影/水波纹底等 rgba() 派生
+}
+
+export const THEME_PRESETS: ThemePreset[] = [
+  { key: 'indigo', name: '靛蓝紫', nameEn: 'Indigo', primary: '#4648d4', primaryContainer: '#6063ee', primaryFixed: '#e1e0ff', rgb: '70, 72, 212' },
+  { key: 'emerald', name: '松石绿', nameEn: 'Emerald', primary: '#0e9271', primaryContainer: '#10b981', primaryFixed: '#d2f2e6', rgb: '14, 146, 113' },
+  { key: 'ocean', name: '海蓝', nameEn: 'Ocean', primary: '#1268c3', primaryContainer: '#3b82f6', primaryFixed: '#dbeafe', rgb: '18, 104, 195' },
+  { key: 'sunset', name: '暖橙', nameEn: 'Sunset', primary: '#d4680a', primaryContainer: '#f59e0b', primaryFixed: '#ffedd5', rgb: '212, 104, 10' },
+  { key: 'rose', name: '玫红', nameEn: 'Rose', primary: '#c2266d', primaryContainer: '#ec4899', primaryFixed: '#fce7f3', rgb: '194, 38, 109' },
+]
+
+export const THEME_KEY = 'sm_theme'
+const savedTheme = THEME_PRESETS.find((p) => p.key === localStorage.getItem(THEME_KEY)) ?? THEME_PRESETS[0]
+export const activeTheme = savedTheme
+
+export const setThemePreset = (key: string) => {
+  localStorage.setItem(THEME_KEY, key)
+  location.reload() // 内联样式在各组件模块里已经算好，只有 reload 能全量生效
+}
+
+// 主色带透明度（阴影/激活底/图表渐变等派生场景统一走这里，别再写死 rgba）
+export const primaryRgba = (alpha: number) => `rgba(${savedTheme.rgb}, ${alpha})`
+
 export const T = {
-  primary: '#4648d4',
-  primaryContainer: '#6063ee',
-  primaryFixed: '#e1e0ff',
+  primary: savedTheme.primary,
+  primaryContainer: savedTheme.primaryContainer,
+  primaryFixed: savedTheme.primaryFixed,
   surface: '#f9f9ff',
   surfaceContainerLow: '#f0f3ff',
   surfaceContainer: '#e7eeff',
@@ -26,9 +60,9 @@ export const T = {
   emerald: '#10b981',
   orange: '#f97316',
   radiusCard: 24,
-  cardShadow: '0 4px 24px rgba(99, 102, 241, 0.05)',
-  ambientShadow: '0 10px 40px -10px rgba(70, 72, 212, 0.08)',
-  glowShadow: '0 0 15px rgba(70, 72, 212, 0.4)',
+  cardShadow: `0 4px 24px rgba(${savedTheme.rgb}, 0.05)`,
+  ambientShadow: `0 10px 40px -10px rgba(${savedTheme.rgb}, 0.08)`,
+  glowShadow: `0 0 15px rgba(${savedTheme.rgb}, 0.4)`,
   sidebarWidth: 260,
   rightPanelWidth: 320,
   topBarHeight: 80,
