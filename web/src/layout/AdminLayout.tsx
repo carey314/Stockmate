@@ -1,4 +1,5 @@
-import { Drawer } from 'antd'
+import { Drawer, Tooltip } from 'antd'
+import { DoubleLeftOutlined, DoubleRightOutlined } from '@ant-design/icons'
 import { useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
@@ -11,13 +12,16 @@ import { useMediaQuery } from '../lib/useMediaQuery'
 
 const PANEL_KEY = 'sm_panel_collapsed'
 
-// 三栏 AppShell：外壳 100vh 不滚动，滚动只发生在 main 滚动区和右栏内部
+// 三栏 AppShell：外壳 100vh 不滚动，滚动只发生在 main 滚动区和右栏内部。
+// 响应式：≥1280 三栏全开；1024~1280 右栏变 Drawer（顶栏铃铛开）；<1024 侧栏也变 Drawer（顶栏汉堡开）。
 export default function AdminLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const wide = useMediaQuery('(min-width: 1280px)')
+  const lg = useMediaQuery('(min-width: 1024px)')
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [navOpen, setNavOpen] = useState(false)
   // 右栏（最近动态 + AI 问生意）可收起，偏好记住；收起后主内容区变宽
   const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem(PANEL_KEY) === '1')
   const togglePanel = () =>
@@ -44,18 +48,77 @@ export default function AdminLayout() {
     navigate('/login', { replace: true })
   }
 
-  // 铃铛按钮：窄屏=开 Drawer；宽屏且已收起=重新展开右栏
-  const onOpenPanel = wide ? (panelCollapsed ? togglePanel : undefined) : () => setDrawerOpen(true)
+  const nav = (key: string) => {
+    navigate(key)
+    setNavOpen(false)
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: T.surface }}>
-      <SideNav items={items} selected={selected} onNavigate={navigate} onLogout={doLogout} />
+      {lg ? (
+        <SideNav items={items} selected={selected} onNavigate={nav} onLogout={doLogout} />
+      ) : (
+        <Drawer
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
+          placement="left"
+          width={T.sidebarWidth + 16}
+          title={null}
+          closable={false}
+          styles={{ body: { padding: 0, height: '100%' } }}
+        >
+          <SideNav items={items} selected={selected} onNavigate={nav} onLogout={doLogout} />
+        </Drawer>
+      )}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <TopBar title={title} onLogout={doLogout} onOpenPanel={onOpenPanel} />
-        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 32px 32px' }}>
+        <TopBar
+          title={title}
+          onLogout={doLogout}
+          onOpenNav={lg ? undefined : () => setNavOpen(true)}
+          onOpenPanel={wide ? (panelCollapsed ? togglePanel : undefined) : () => setDrawerOpen(true)}
+        />
+        <div style={{ flex: 1, overflowY: 'auto', padding: lg ? '4px 32px 32px' : '4px 16px 24px' }}>
           <Outlet />
         </div>
       </div>
+      {/* 右栏收放把手：贴着面板左缘，收起时滑到屏幕右缘。单把手随面板滑动，
+          别再把按钮放进面板头部——会和「最近动态」的刷新钮重叠（用户截过图） */}
+      {wide && (
+        <Tooltip
+          title={panelCollapsed ? t('展开动态与 AI 助手', 'Expand panel') : t('收起面板', 'Collapse panel')}
+          placement="left"
+        >
+          <div
+            onClick={togglePanel}
+            style={{
+              position: 'fixed',
+              right: panelCollapsed ? 0 : T.rightPanelWidth,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              zIndex: 100,
+              width: 20,
+              height: 60,
+              borderRadius: '10px 0 0 10px',
+              background: '#fff',
+              border: `1px solid ${T.cardBorder}`,
+              borderRight: 'none',
+              boxShadow: T.cardShadow,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: T.secondary,
+              transition: 'right .25s ease',
+            }}
+          >
+            {panelCollapsed ? (
+              <DoubleLeftOutlined style={{ fontSize: 10 }} />
+            ) : (
+              <DoubleRightOutlined style={{ fontSize: 10 }} />
+            )}
+          </div>
+        </Tooltip>
+      )}
       {wide ? (
         <aside
           style={{
@@ -70,7 +133,7 @@ export default function AdminLayout() {
         >
           {/* 内层固定宽度：收起动画时内容不被挤压变形 */}
           <div style={{ width: T.rightPanelWidth, height: '100%' }}>
-            <RightPanel onCollapse={togglePanel} />
+            <RightPanel />
           </div>
         </aside>
       ) : (

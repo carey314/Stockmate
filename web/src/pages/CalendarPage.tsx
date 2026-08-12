@@ -274,7 +274,9 @@ export default function CalendarPage() {
       </div>
 
       <Spin spinning={loading}>
-        <div style={{ ...cardStyle, padding: 20 }}>
+        {/* 窄屏时 7 列格子横向滚动（minWidth 兜底），不挤成一列竖条 */}
+        <div style={{ ...cardStyle, padding: 20, overflowX: 'auto' }}>
+          <div style={{ minWidth: 720 }}>
           {/* 星期表头 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 8 }}>
             {WEEKDAYS.map((w) => (
@@ -401,6 +403,7 @@ export default function CalendarPage() {
               })}
             </div>
           )}
+          </div>
         </div>
       </Spin>
 

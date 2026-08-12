@@ -38,7 +38,7 @@ export default function LoginPage() {
     >
       <Card
         style={{
-          width: 400,
+          width: 'min(400px, 92vw)',
           borderRadius: 24,
           boxShadow: `0 12px 40px ${primaryRgba(0.12)}`,
         }}

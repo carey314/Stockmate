@@ -4,6 +4,7 @@ import {
   CalendarOutlined,
   DownloadOutlined,
   LogoutOutlined,
+  MenuOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { useState } from 'react'
@@ -12,20 +13,24 @@ import api from '../api/client'
 import { useAuth } from '../auth'
 import { T } from '../theme'
 import { dateFormat, t } from '../lib/i18n'
+import { useMediaQuery } from '../lib/useMediaQuery'
 
 export default function TopBar({
   title,
   onOpenPanel,
+  onOpenNav,
   onLogout,
 }: {
   title: string
-  onOpenPanel?: () => void // 窄屏时打开右栏 Drawer
+  onOpenPanel?: () => void // 右栏收起/窄屏时：打开右栏
+  onOpenNav?: () => void // <1024px 时：打开侧栏 Drawer（汉堡钮）
   onLogout: () => void
 }) {
   const { user, profile } = useAuth()
   const { message } = App.useApp()
   const isAdmin = user?.role === 'admin'
   const [exporting, setExporting] = useState(false)
+  const md = useMediaQuery('(min-width: 768px)')
 
   // 诚实承诺：数据永远是用户的，随时全量带走（GET /export/all，仅老板）
   const onExport = async () => {
@@ -54,44 +59,50 @@ export default function TopBar({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 32px',
+        gap: 12,
+        padding: md ? '0 32px' : '0 16px',
         background: 'rgba(249, 249, 255, 0.8)',
         backdropFilter: 'blur(24px)',
         zIndex: 10,
       }}
     >
-      <div
-        style={{
-          fontSize: 28,
-          fontWeight: 700,
-          letterSpacing: '-0.02em',
-          color: T.onSurface,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        {onOpenNav && <Button shape="circle" icon={<MenuOutlined />} onClick={onOpenNav} />}
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 16px',
-            borderRadius: 999,
-            background: 'rgba(255, 255, 255, 0.95)',
-            border: '1px solid rgba(199, 196, 215, 0.5)',
-            fontSize: 13,
-            fontWeight: 600,
-            color: T.onSurfaceVariant,
-            boxShadow: T.cardShadow,
+            fontSize: md ? 28 : 20,
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            color: T.onSurface,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
-          <CalendarOutlined style={{ color: T.secondary }} />
-          {dayjs().format(dateFormat)}
+          {title}
         </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+        {md && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              borderRadius: 999,
+              background: 'rgba(255, 255, 255, 0.95)',
+              border: '1px solid rgba(199, 196, 215, 0.5)',
+              fontSize: 13,
+              fontWeight: 600,
+              color: T.onSurfaceVariant,
+              boxShadow: T.cardShadow,
+            }}
+          >
+            <CalendarOutlined style={{ color: T.secondary }} />
+            {dayjs().format(dateFormat)}
+          </div>
+        )}
         {onOpenPanel && (
           <Button
             shape="circle"
@@ -108,7 +119,7 @@ export default function TopBar({
             onClick={onExport}
             style={{ fontWeight: 600 }}
           >
-            {t('导出数据', 'Export')}
+            {md ? t('导出数据', 'Export') : null}
           </Button>
         )}
         <Dropdown
@@ -130,7 +141,7 @@ export default function TopBar({
             }}
           >
             <Avatar size={30} style={{ background: T.primary }} icon={<UserOutlined />} />
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{profile?.shopName || user?.realName}</span>
+            {md && <span style={{ fontSize: 13, fontWeight: 600 }}>{profile?.shopName || user?.realName}</span>}
             <Tag
               color={isAdmin ? 'purple' : 'default'}
               style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: 11 }}
