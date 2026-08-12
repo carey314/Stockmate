@@ -4,6 +4,7 @@ import {
   AppstoreOutlined,
   AuditOutlined,
   BarChartOutlined,
+  CalendarOutlined,
   FileTextOutlined,
   HomeOutlined,
   BellOutlined,
@@ -41,6 +42,8 @@ export const NAV: NavItem[] = [
   { key: '/ledger', icon: <AccountBookOutlined />, label: '收支记账' },
   { key: '/quick-entry', icon: <ThunderboltOutlined />, label: '文本记账' },
   { key: '/reports', icon: <BarChartOutlined />, label: '报表大屏' },
+  // 收益日历=现金口径的钱进钱出，只给老板看（与 App 侧同权限；staff 连菜单都不渲染，接口 adminOnly 兜底）
+  { key: '/calendar', icon: <CalendarOutlined />, label: '收益日历', adminOnly: true },
   { key: '/statements', icon: <FileTextOutlined />, label: '对账单' },
   { key: '/import', icon: <ImportOutlined />, label: '批量导入' },
   { key: '/settings', icon: <SettingOutlined />, label: '设置' },

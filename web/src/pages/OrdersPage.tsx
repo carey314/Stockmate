@@ -16,6 +16,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { PrinterOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
 import { fmtMoney, fmtQty, fmtTime } from '../lib/format'
@@ -104,6 +105,17 @@ export default function OrdersPage() {
     load()
     if (id) openDetail(id)
   }
+
+  // 深链 /orders?id=xx：收益日历等页跳过来直接打开该单详情（用完即清，避免刷新重复打开）
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const id = Number(searchParams.get('id'))
+    if (id) {
+      openDetail(id)
+      setSearchParams({}, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ===== 收款 =====
   const [payOpen, setPayOpen] = useState(false)

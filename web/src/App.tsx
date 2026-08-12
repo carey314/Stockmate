@@ -13,6 +13,7 @@ import StocktakePage from './pages/StocktakePage'
 import LedgerPage from './pages/LedgerPage'
 import QuickEntryPage from './pages/QuickEntryPage'
 import ReportsPage from './pages/ReportsPage'
+import CalendarPage from './pages/CalendarPage'
 import StatementsPage from './pages/StatementsPage'
 import ImportPage from './pages/ImportPage'
 import SettingsPage from './pages/SettingsPage'
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="ledger" element={<LedgerPage />} />
         <Route path="quick-entry" element={<QuickEntryPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="calendar" element={<CalendarPage />} />
         <Route path="statements" element={<StatementsPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="settings" element={<SettingsPage />} />
