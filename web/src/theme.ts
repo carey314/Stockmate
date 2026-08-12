@@ -97,6 +97,7 @@ export const antdTheme: ThemeConfig = {
     Table: { borderRadiusLG: T.radiusCard, headerBg: T.surfaceContainerLow },
     Tag: { borderRadiusSM: 999 },
     Modal: { borderRadiusLG: 20 },
-    Drawer: { paddingLG: 0 },
+    // Drawer 不许全局设 paddingLG:0——订单/进货/盘点详情抽屉都吃默认 padding，
+    // 设 0 会让它们全部贴边（用户截过图）。要 0 的地方（布局层两个 Drawer）自己显式设。
   },
 }
