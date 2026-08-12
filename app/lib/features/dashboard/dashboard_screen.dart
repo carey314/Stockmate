@@ -3,12 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/api.dart';
+import '../../core/local_notice.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import 'startup_guide.dart';
 import '../notifications/notifications_screen.dart';
 
 final _money = NumberFormat('#,##0.##');
+
+// 每次冷启动进首页时重排提醒（召回顺延到 3 天后；没开提醒的用户零成本直接返回）
+bool _noticeRefreshed = false;
 
 /// 首页看板：今日毛利大数字 + AI 口述入口 + 关键指标
 class DashboardScreen extends ConsumerWidget {
@@ -92,6 +96,10 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!_noticeRefreshed) {
+      _noticeRefreshed = true;
+      LocalNotice.I.applySchedule(); // fire-and-forget，没开提醒时内部直接 return
+    }
     final t = Theme.of(context).textTheme;
     final overview = ref.watch(overviewProvider);
 

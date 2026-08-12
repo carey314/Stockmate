@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api.dart';
+import '../../core/local_notice.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -822,7 +823,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         SharedPreferences.getInstance().then((sp) => sp.remove(_draftKey));
         HapticFeedback.mediumImpact(); // 收银的"叮"感
         _toast(neg.isEmpty ? '✓ 开单成功，库存已扣减' : '✓ 开单成功。${neg.join("、")} 已成负库存，记得补录进货');
-        if (context.canPop()) context.pop();
+        // 留存钩子：开单成功的高光时刻，一次性引导开通收摊提醒（终生只弹一次，拒绝不再烦）
+        await _maybeAskDailyNotice();
+        if (mounted && context.canPop()) context.pop();
       }
     } catch (e) {
       _toast('$e');
@@ -833,6 +836,31 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
 
   void _toast(String msg) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _maybeAskDailyNotice() async {
+    if (await LocalNotice.I.prompted || await LocalNotice.I.enabled) return;
+    await LocalNotice.I.markPrompted();
+    if (!mounted) return;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('要每天提醒你收摊记账吗？'),
+        content: const Text('每天收摊时间（默认 21:00）提醒一声，账目不攒堆。提醒由手机本地发出，随时可在 通知 → 提醒设置 里关。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('以后再说')),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(96, 44)), // 按钮进 Row 必须有限宽
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('好，提醒我'),
+          ),
+        ],
+      ),
+    );
+    if (yes == true) {
+      final ok = await LocalNotice.I.setEnabled(true);
+      _toast(ok ? '✓ 已开启，每天 21:00 提醒（通知页可改时间）' : '通知权限没开，去 系统设置 → 智存 → 通知 里打开');
+    }
   }
 
   @override

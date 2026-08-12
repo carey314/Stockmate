@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api.dart';
 import '../../core/theme.dart';
+import 'notice_settings_screen.dart';
 
 /// 通知 = 待办，不是日志（docs/notification-design.md P1）
 /// 实时聚合现有接口，零后端改动；已读状态存本地（内容指纹变了自动重新变未读）
@@ -158,6 +159,13 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       appBar: AppBar(
         title: const Text('通知'),
         actions: [
+          IconButton(
+            tooltip: '提醒设置',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NoticeSettingsScreen()),
+            ),
+          ),
           items.maybeWhen(
             data: (list) => list.any((i) => !_read.contains(i.key))
                 ? TextButton(
