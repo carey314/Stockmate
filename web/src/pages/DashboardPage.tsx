@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../auth'
 import StatCard from '../components/StatCard'
+import CountUp from '../components/CountUp'
 import SalesTrendChart, { type SalesPoint } from '../components/SalesTrendChart'
 import RestockCard from '../components/RestockCard'
 import { fmtMoney } from '../lib/format'
@@ -147,7 +148,7 @@ export default function DashboardPage() {
             <Col xs={12} xl={6}>
               <StatCard
                 title="今日销售额"
-                value={fmtMoney(ov.todaySales)}
+                value={<CountUp value={ov.todaySales} format={fmtMoney} />}
                 icon={<AccountBookOutlined />}
                 trend={trend.sales}
               />
@@ -155,7 +156,7 @@ export default function DashboardPage() {
             <Col xs={12} xl={6}>
               <StatCard
                 title="今日订单数"
-                value={ov.todayOrderCount}
+                value={<CountUp value={ov.todayOrderCount} />}
                 icon={<ShoppingOutlined />}
                 trend={trend.orders}
               />
@@ -164,7 +165,7 @@ export default function DashboardPage() {
               <Col xs={12} xl={6}>
                 <StatCard
                   title="今日毛利"
-                  value={fmtMoney(ov.todayProfit)}
+                  value={<CountUp value={ov.todayProfit} format={fmtMoney} />}
                   icon={<RiseOutlined />}
                   note={
                     ov.profitUnreliable
@@ -177,13 +178,13 @@ export default function DashboardPage() {
               </Col>
             ) : (
               <Col xs={12} xl={6}>
-                <StatCard title="在售商品" value={ov.productCount} icon={<AppstoreOutlined />} />
+                <StatCard title="在售商品" value={<CountUp value={ov.productCount} />} icon={<AppstoreOutlined />} />
               </Col>
             )}
             <Col xs={12} xl={6}>
               <StatCard
                 title="库存预警"
-                value={ov.lowStockCount}
+                value={<CountUp value={ov.lowStockCount} />}
                 icon={<WarningOutlined />}
                 alert={ov.lowStockCount > 0}
               />

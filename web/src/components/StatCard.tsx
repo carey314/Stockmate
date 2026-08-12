@@ -1,7 +1,9 @@
 import { CaretDownOutlined, CaretUpOutlined } from '@ant-design/icons'
 import { T, cardStyle } from '../theme'
+import SpotlightCard from './SpotlightCard'
 
 // 原型 _3 指标卡：图标圆片 48px + 标签 + 大数字 + 裸彩色趋势文字（非 chip）
+// value 收 ReactNode：调用方可以塞 <CountUp/> 让数字滚动到位
 export default function StatCard({
   title,
   value,
@@ -12,7 +14,7 @@ export default function StatCard({
   note,
 }: {
   title: string
-  value: string | number
+  value: React.ReactNode
   icon: React.ReactNode
   trend?: number | null // 比例值，null/undefined = 不显示趋势行
   trendLabel?: string
@@ -22,7 +24,7 @@ export default function StatCard({
   const up = (trend ?? 0) > 0
   const flat = trend === 0
   return (
-    <div style={{ ...cardStyle, padding: '22px 24px', overflow: 'hidden' }}>
+    <SpotlightCard style={{ ...cardStyle, padding: '22px 24px', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <div
           style={{
@@ -81,6 +83,6 @@ export default function StatCard({
       {note && (
         <div style={{ fontSize: 12, color: T.error, marginTop: 10, lineHeight: '17px' }}>{note}</div>
       )}
-    </div>
+    </SpotlightCard>
   )
 }

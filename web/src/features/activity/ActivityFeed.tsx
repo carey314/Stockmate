@@ -146,7 +146,11 @@ export default function ActivityFeed() {
           <Empty description="还没有动态，去 App 上开第一单" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           feed.map((it, i) => (
-            <div key={it.key} style={{ position: 'relative', paddingLeft: 24, paddingBottom: 20 }}>
+            <div
+              key={it.key}
+              className="feed-item-in"
+              style={{ position: 'relative', paddingLeft: 24, paddingBottom: 20, animationDelay: `${Math.min(i, 8) * 45}ms` }}
+            >
               {i < feed.length - 1 && (
                 <span
                   style={{

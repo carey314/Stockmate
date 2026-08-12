@@ -87,3 +87,52 @@ body {
     transform: translateY(-3px);
   }
 }
+
+/* ===== 微交互（ReactBits 风格，自实现） ===== */
+
+/* 最近动态：列表项渐入（首屏/刷新时逐条浮现，delay 由行内 style 按 index 叠） */
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.feed-item-in {
+  animation: feed-in 0.35s ease both;
+}
+
+/* 指标卡：鼠标跟随高光（坐标由 SpotlightCard 组件写进 CSS 变量） */
+.spotlight-card {
+  position: relative;
+}
+.spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    340px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    var(--spot-color, rgba(70, 72, 212, 0.09)),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.spotlight-card:hover::before {
+  opacity: 1;
+}
+
+/* 用户系统开了"减弱动态效果"就全部安静 */
+@media (prefers-reduced-motion: reduce) {
+  .feed-item-in {
+    animation: none;
+  }
+  .spotlight-card::before {
+    display: none;
+  }
+}

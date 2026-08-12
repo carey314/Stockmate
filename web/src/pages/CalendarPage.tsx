@@ -20,6 +20,7 @@ import api from '../api/client'
 import { fmtMoney } from '../lib/format'
 import { T, cardStyle } from '../theme'
 import { useAuth } from '../auth'
+import CountUp from '../components/CountUp'
 
 // ===== 类型（对齐 server/src/controllers/calendar.js 的响应）=====
 
@@ -257,9 +258,17 @@ export default function CalendarPage() {
         </Button>
         <span style={{ marginLeft: 'auto', fontSize: 13, color: T.secondary }}>
           {view === 'month' ? '本月' : '本周'}收入{' '}
-          <b style={{ color: GREEN }}>{fmtMoney(sum.income)}</b> · 支出{' '}
-          <b style={{ color: RED }}>{fmtMoney(sum.expense)}</b> · 净{' '}
-          <b style={{ color: netColor(sumNet) }}>{fmtNet(sumNet)}</b>
+          <b style={{ color: GREEN }}>
+            <CountUp value={sum.income} format={fmtMoney} />
+          </b>{' '}
+          · 支出{' '}
+          <b style={{ color: RED }}>
+            <CountUp value={sum.expense} format={fmtMoney} />
+          </b>{' '}
+          · 净{' '}
+          <b style={{ color: netColor(sumNet) }}>
+            <CountUp value={sumNet} format={fmtNet} />
+          </b>
           <span style={{ marginLeft: 8, color: T.outlineVariant }}>现金口径，与资金流水一致</span>
         </span>
       </div>
@@ -435,7 +444,7 @@ export default function CalendarPage() {
                 <div key={label} style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 12, color: T.secondary }}>{label}</div>
                   <div style={{ fontSize: 18, fontWeight: 800, color }}>
-                    {label === '净' ? fmtNet(v) : fmtMoney(v)}
+                    <CountUp value={v} format={label === '净' ? fmtNet : fmtMoney} duration={500} />
                   </div>
                 </div>
               ))}
