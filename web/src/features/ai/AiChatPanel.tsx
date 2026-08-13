@@ -67,11 +67,9 @@ export default function AiChatPanel() {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '46%',
-        minHeight: 260,
-        flexShrink: 0,
-        borderTop: '1px solid rgba(199, 196, 215, 0.4)',
-        paddingTop: 14,
+        // 高度由 RightPanel 的拖拽分隔条分配（sm_panel_ratio），这里只负责填满
+        height: '100%',
+        minHeight: 0,
       }}
     >
       <div
