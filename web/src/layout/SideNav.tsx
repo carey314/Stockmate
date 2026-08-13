@@ -177,6 +177,14 @@ export default function SideNav({
           <LogoutOutlined style={{ fontSize: 17 }} />
           {t('退出登录', 'Sign out')}
         </div>
+        <a
+          href="https://beian.miit.gov.cn"
+          target="_blank"
+          rel="noreferrer"
+          style={{ fontSize: 11, color: T.outlineVariant, padding: '6px 16px 0' }}
+        >
+          鲁ICP备2026014341号-1
+        </a>
       </div>
     </aside>
   )

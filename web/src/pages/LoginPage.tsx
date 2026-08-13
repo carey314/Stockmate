@@ -88,6 +88,17 @@ export default function LoginPage() {
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {t('账号与手机 App 通用，暂不支持在网页注册。', 'Accounts are shared with the mobile app. Sign-up is app-only for now.')}
           </Typography.Text>
+          {/* 工信部要求备案号在首页底部显著位置并链接查询系统；号变更全局搜「鲁ICP备」 */}
+          <div style={{ textAlign: 'center', marginTop: 20 }}>
+            <a
+              href="https://beian.miit.gov.cn"
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 12, color: '#9b99ab' }}
+            >
+              鲁ICP备2026014341号-1
+            </a>
+          </div>
         </Form>
       </Card>
     </div>

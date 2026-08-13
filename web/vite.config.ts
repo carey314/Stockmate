@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// 将来挂 nginx qxju.shop/stockmate/admin/ 子路径
+// 生产挂 qxju.shop/mate/（构建时 VITE_BASE=/mate/）；
+// dev 与本地测试脚本沿用 /stockmate/admin/ 不变
 export default defineConfig({
-  base: '/stockmate/admin/',
+  base: process.env.VITE_BASE || '/stockmate/admin/',
   plugins: [react()],
   server: {
     port: 5180,
