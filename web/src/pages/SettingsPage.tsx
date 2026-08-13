@@ -20,6 +20,7 @@ import api from '../api/client'
 import { useAuth } from '../auth'
 import { T, cardStyle, THEME_PRESETS, activeTheme, setThemePreset } from '../theme'
 import { LANG, setLang, t } from '../lib/i18n'
+import { FONT_SCALES, currentFontScale, setFontScale } from '../lib/fontScale'
 
 interface UserRow {
   id: number
@@ -158,6 +159,7 @@ export default function SettingsPage() {
   // ===== 修改自己密码（所有人）=====
   const [pwdBusy, setPwdBusy] = useState(false)
   const [pwdForm] = Form.useForm()
+  const [fontScale, setFontScaleState] = useState(() => currentFontScale())
   const changePwd = async () => {
     const v = await pwdForm.validateFields()
     setPwdBusy(true)
@@ -322,6 +324,22 @@ export default function SettingsPage() {
                 )
               })}
             </div>
+          </div>
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 12.5, display: 'block', marginBottom: 10 }}>
+              {t('文字大小', 'Text size')}
+            </Typography.Text>
+            <Segmented
+              value={fontScale}
+              onChange={(v) => {
+                setFontScale(v as string)
+                setFontScaleState(v as string)
+              }}
+              options={FONT_SCALES.map((s) => ({ label: t(s.name, s.nameEn), value: s.key }))}
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginTop: 8 }}>
+              {t('整个界面一起放大，立即生效。', 'Scales the whole interface, applies instantly.')}
+            </Typography.Text>
           </div>
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12.5, display: 'block', marginBottom: 10 }}>

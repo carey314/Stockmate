@@ -7,6 +7,7 @@ import enUS from 'antd/locale/en_US'
 import { staticHolder } from './antdStatic'
 import { antdTheme } from './theme'
 import { LANG } from './lib/i18n'
+import { applyFontScale } from './lib/fontScale'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import '@fontsource/manrope/400.css'
@@ -18,6 +19,7 @@ import { AuthProvider } from './auth'
 import './index.css'
 
 dayjs.locale(LANG === 'zh' ? 'zh-cn' : 'en')
+applyFontScale() // 启动即应用文字大小偏好（body zoom，即时生效无需 reload）
 
 // 把 AntApp 上下文里的 message 实例交给非组件代码（axios 拦截器）用
 function AntdStaticBridge() {
