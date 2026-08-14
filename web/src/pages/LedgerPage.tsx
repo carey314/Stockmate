@@ -14,6 +14,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
 import { fmtMoney } from '../lib/format'
@@ -58,7 +59,13 @@ const isIncome = (e: Entry): e is Income => 'source' in e
 
 export default function LedgerPage() {
   const { message } = App.useApp()
-  const [mode, setMode] = useState<Mode>('income')
+  // tab 进 URL（?tab=expense）：刷新/分享链接不丢当前视图
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [mode, setMode] = useState<Mode>(() => (searchParams.get('tab') === 'expense' ? 'expense' : 'income'))
+  const switchMode = (m: Mode) => {
+    setMode(m)
+    setSearchParams(m === 'expense' ? { tab: 'expense' } : {}, { replace: true })
+  }
   const [range, setRange] = useState<[Dayjs, Dayjs]>(() => PRESETS[2].range())
   const [rows, setRows] = useState<Entry[]>([])
   const [total, setTotal] = useState(0)
@@ -196,7 +203,7 @@ export default function LedgerPage() {
           {(['income', 'expense'] as Mode[]).map((m) => (
             <span
               key={m}
-              onClick={() => setMode(m)}
+              onClick={() => switchMode(m)}
               style={{
                 padding: '6px 16px',
                 borderRadius: 999,

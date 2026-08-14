@@ -1,6 +1,6 @@
 import { Alert, App, Button, Checkbox, Empty, Input, Select, Table, Tag, Typography } from 'antd'
 import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
 import { fmtMoney, fmtQty } from '../lib/format'
 import { T, cardStyle } from '../theme'
@@ -70,6 +70,15 @@ export default function QuickEntryPage() {
   const [resp, setResp] = useState<ParseResp | null>(null)
   const [committing, setCommitting] = useState(false)
   const [done, setDone] = useState<ConfirmResp | null>(null)
+
+  // 口述文本/解析草案未确认入库时，拦误刷新误关标签（done 后草案已落库，不拦）
+  useEffect(() => {
+    const dirty = !done && (text.trim().length > 0 || resp !== null)
+    if (!dirty) return
+    const guard = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [text, resp, done])
 
   // 可编辑草案的本地态：用索引 key 存 勾选/单价/收款/进价 覆盖
   const [saleEdit, setSaleEdit] = useState<Record<number, { on: boolean; unitPrice: number | null; paid: boolean | null }>>({})

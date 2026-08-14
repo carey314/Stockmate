@@ -47,6 +47,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (localStorage.getItem(TOKEN_KEY)) refreshProfile().catch(() => {})
   }, [refreshProfile])
 
+  // 多标签页登录态同步：A 标签退出/被 401 踢，B 标签立即跟着下线（storage 事件只在
+  // 其他标签触发）；反向：A 登录，B 自动拉取身份。没有它，退出后别的标签还"活着"。
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== TOKEN_KEY) return
+      if (!e.newValue) {
+        localStorage.removeItem(USER_KEY)
+        setUser(null)
+        setProfile(null)
+      } else {
+        refreshProfile().catch(() => {})
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [refreshProfile])
+
   const login = useCallback(
     async (username: string, password: string) => {
       const data = await api.post<{ token: string; user: ApiUser }>('/auth/login', {

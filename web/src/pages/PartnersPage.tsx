@@ -16,6 +16,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import api from '../api/client'
 import { fmtMoney, fmtQty } from '../lib/format'
@@ -67,7 +68,13 @@ interface UnpaidOrder {
 
 export default function PartnersPage() {
   const { message } = App.useApp()
-  const [mode, setMode] = useState<Mode>('customer')
+  // tab 进 URL（?tab=supplier）：刷新/分享链接不丢当前视图
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [mode, setMode] = useState<Mode>(() => (searchParams.get('tab') === 'supplier' ? 'supplier' : 'customer'))
+  const switchMode = (m: Mode) => {
+    setMode(m)
+    setSearchParams(m === 'supplier' ? { tab: 'supplier' } : {}, { replace: true })
+  }
   const [keyword, setKeyword] = useState('')
   const [rows, setRows] = useState<Partner[]>([])
   const [loading, setLoading] = useState(false)
@@ -343,7 +350,7 @@ export default function PartnersPage() {
             <span
               key={m}
               onClick={() => {
-                setMode(m)
+                switchMode(m)
                 setKeyword('')
               }}
               style={{

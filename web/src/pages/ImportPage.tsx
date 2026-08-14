@@ -51,6 +51,15 @@ export default function ImportPage() {
   const [result, setResult] = useState<ImportResp | null>(null)
   const [selected, setSelected] = useState<React.Key[]>([])
   const [committing, setCommitting] = useState(false)
+
+  // 粘贴的清单/解析出的草案还没入库时，误刷新/误关标签要拦一下（几百行 Excel 白粘了最伤人）
+  useEffect(() => {
+    const dirty = text.trim().length > 0 || result !== null
+    if (!dirty) return
+    const guard = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [text, result])
   const [done, setDone] = useState<BatchResp | null>(null)
 
   useEffect(() => {

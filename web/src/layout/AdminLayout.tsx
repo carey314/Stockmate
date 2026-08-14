@@ -1,6 +1,7 @@
 import { Drawer, Tooltip } from 'antd'
 import { DoubleLeftOutlined, DoubleRightOutlined } from '@ant-design/icons'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import ErrorBoundary from '../components/ErrorBoundary'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { T } from '../theme'
@@ -48,6 +49,12 @@ export default function AdminLayout() {
     navigate('/login', { replace: true })
   }
 
+  // 浏览器标签页标题跟随当前页（市面后台标配——多开几个 tab 时能分清哪个是哪个）
+  useEffect(() => {
+    const page = selected === '/' ? t('工作台', 'Dashboard') : (NAV.find((n) => n.key === selected)?.label ?? '')
+    document.title = `${page} · ${t('智存后台', 'StockMate Admin')}`
+  }, [selected])
+
   const nav = (key: string) => {
     navigate(key)
     setNavOpen(false)
@@ -78,7 +85,10 @@ export default function AdminLayout() {
           onOpenPanel={wide ? (panelCollapsed ? togglePanel : undefined) : () => setDrawerOpen(true)}
         />
         <div style={{ flex: 1, overflowY: 'auto', padding: lg ? '4px 32px 32px' : '4px 16px 24px' }}>
-          <Outlet />
+          {/* key=selected：切页面时重置错误状态，坏掉的页不拖累下一页 */}
+          <ErrorBoundary key={selected}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </div>
       {/* 右栏收放把手：贴着面板左缘，收起时滑到屏幕右缘。单把手随面板滑动，
