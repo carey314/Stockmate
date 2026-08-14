@@ -21,6 +21,7 @@ import {
 import { useState } from 'react'
 import { T, primaryRgba } from '../theme'
 import { t } from '../lib/i18n'
+import logoImg from '../assets/logo.png'
 
 export interface NavItem {
   key: string
@@ -107,23 +108,8 @@ export default function SideNav({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 8px', marginBottom: 40 }}>
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            background: `linear-gradient(135deg, ${T.primary}, ${T.primaryContainer})`,
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 700,
-            fontSize: 18,
-            flexShrink: 0,
-          }}
-        >
-          智
-        </div>
+        {/* 图标源文件 ~/Downloads/browser/mate.png，更新时 sips -Z 256 重出 src/assets/logo.png */}
+        <img src={logoImg} alt="智存" style={{ width: 42, height: 42, flexShrink: 0 }} />
         <div>
           <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: '-0.01em', color: T.primary }}>
             {t('智存后台', 'StockMate Admin')}

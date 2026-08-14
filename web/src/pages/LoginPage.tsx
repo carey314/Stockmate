@@ -6,6 +6,7 @@ import { useAuth } from '../auth'
 import { T, primaryRgba } from '../theme'
 import { t } from '../lib/i18n'
 import { useMediaQuery } from '../lib/useMediaQuery'
+import logoImg from '../assets/logo.png'
 
 // 登录页：桌面左右分栏（左=品牌价值面，右=表单），<900px 回落单卡居中。
 // 左面卖点文案与提审文案口径一致（docs/appstore-listing.md），不许吹没有的功能。
@@ -36,25 +37,9 @@ export default function LoginPage() {
     }
   }
 
-  const logo = (size: number, fontSize: number) => (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size * 0.28,
-        background: `linear-gradient(135deg, ${T.primary}, ${T.primaryContainer})`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontSize,
-        fontWeight: 700,
-        boxShadow: `0 8px 24px ${primaryRgba(0.35)}`,
-        flexShrink: 0,
-      }}
-    >
-      智
-    </div>
+  // 图标源文件 ~/Downloads/browser/mate.png（图自带圆角+投影，直接 img）
+  const logo = (size: number) => (
+    <img src={logoImg} alt="智存" style={{ width: size, height: size, flexShrink: 0 }} />
   )
 
   const form = (
@@ -122,7 +107,7 @@ export default function LoginPage() {
           }}
         >
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>{logo(56, 26)}</div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>{logo(60)}</div>
             <Typography.Title level={3} style={{ margin: 0, fontWeight: 700 }}>
               {t('智存管理后台', 'StockMate Admin')}
             </Typography.Title>
@@ -181,22 +166,17 @@ export default function LoginPage() {
         />
         <div className="fade-up" style={{ position: 'relative', maxWidth: 460 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 36 }}>
-            <div
+            <img
+              src={logoImg}
+              alt="智存"
               style={{
-                width: 46,
-                height: 46,
-                borderRadius: 13,
-                background: 'rgba(255,255,255,0.16)',
-                border: '1px solid rgba(255,255,255,0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 22,
-                fontWeight: 700,
+                width: 48,
+                height: 48,
+                flexShrink: 0,
+                // 深色渐变底上给图标一圈浅光晕，否则蓝底蓝图标会糊在一起
+                filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.35))',
               }}
-            >
-              智
-            </div>
+            />
             <div>
               <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: '0.01em' }}>
                 {t('智存 StockMate', 'StockMate')}
