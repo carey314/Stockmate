@@ -5,6 +5,7 @@ import {
   DownloadOutlined,
   LogoutOutlined,
   MenuOutlined,
+  SearchOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { useState } from 'react'
@@ -19,11 +20,13 @@ export default function TopBar({
   title,
   onOpenPanel,
   onOpenNav,
+  onOpenSearch,
   onLogout,
 }: {
   title: string
   onOpenPanel?: () => void // 右栏收起/窄屏时：打开右栏
   onOpenNav?: () => void // <1024px 时：打开侧栏 Drawer（汉堡钮）
+  onOpenSearch?: () => void // Cmd+K 全局搜索
   onLogout: () => void
 }) {
   const { user, profile } = useAuth()
@@ -102,6 +105,16 @@ export default function TopBar({
             <CalendarOutlined style={{ color: T.secondary }} />
             {dayjs().format(dateFormat)}
           </div>
+        )}
+        {onOpenSearch && (
+          <Button
+            shape={md ? 'round' : 'circle'}
+            icon={<SearchOutlined />}
+            onClick={onOpenSearch}
+            title={t('全局搜索', 'Search')}
+          >
+            {md ? <span style={{ fontSize: 11, color: T.secondary }}>⌘K</span> : null}
+          </Button>
         )}
         {onOpenPanel && (
           <Button

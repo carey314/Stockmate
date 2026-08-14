@@ -74,8 +74,35 @@ interface Line {
 
 export default function PurchasePage() {
   const { message } = App.useApp()
-  const [filter, setFilter] = useState<Filter>('all')
-  const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null)
+  // 筛选进 URL（与订单页同构）：刷新/分享不丢视图
+  const [urlParams, setUrlParams] = useSearchParams()
+  const [filter, setFilter] = useState<Filter>(() => {
+    const s = urlParams.get('status')
+    return s === 'unpaid' || s === 'cancelled' ? s : 'all'
+  })
+  const [range, setRange] = useState<[Dayjs, Dayjs] | null>(() => {
+    const f = urlParams.get('from')
+    const t = urlParams.get('to')
+    return f && t && dayjs(f).isValid() && dayjs(t).isValid() ? [dayjs(f), dayjs(t)] : null
+  })
+  useEffect(() => {
+    setUrlParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        if (filter === 'all') p.delete('status')
+        else p.set('status', filter)
+        if (range) {
+          p.set('from', range[0].format('YYYY-MM-DD'))
+          p.set('to', range[1].format('YYYY-MM-DD'))
+        } else {
+          p.delete('from')
+          p.delete('to')
+        }
+        return p
+      },
+      { replace: true },
+    )
+  }, [filter, range, setUrlParams])
   const [rows, setRows] = useState<PORow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -141,13 +168,19 @@ export default function PurchasePage() {
     if (id) openDetail(id)
   }
 
-  // 深链 /purchase?id=xx：收益日历等页跳过来直接打开该单详情（用完即清，避免刷新重复打开）
-  const [searchParams, setSearchParams] = useSearchParams()
+  // 深链 /purchase?id=xx：收益日历等页跳过来直接打开该单详情（只清 id，保留筛选参数）
   useEffect(() => {
-    const id = Number(searchParams.get('id'))
+    const id = Number(urlParams.get('id'))
     if (id) {
       openDetail(id)
-      setSearchParams({}, { replace: true })
+      setUrlParams(
+        (prev) => {
+          const p = new URLSearchParams(prev)
+          p.delete('id')
+          return p
+        },
+        { replace: true },
+      )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

@@ -75,7 +75,7 @@ export default function PartnersPage() {
     setMode(m)
     setSearchParams(m === 'supplier' ? { tab: 'supplier' } : {}, { replace: true })
   }
-  const [keyword, setKeyword] = useState('')
+  const [keyword, setKeyword] = useState(() => searchParams.get('kw') ?? '') // Cmd+K 跳转带 ?kw=
   const [rows, setRows] = useState<Partner[]>([])
   const [loading, setLoading] = useState(false)
   const [types, setTypes] = useState<ProductType[]>([])

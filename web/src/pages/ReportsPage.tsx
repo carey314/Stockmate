@@ -1,5 +1,6 @@
 import { Alert, DatePicker, Skeleton, Statistic, Table, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
 import { useAuth } from '../auth'
@@ -103,7 +104,19 @@ const stat = (title: string, value: number, money = true, color?: string) => (
 export default function ReportsPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
-  const [range, setRange] = useState<[Dayjs, Dayjs]>(() => PRESETS[1].range())
+  // 日期区间进 URL（?from=&to=）：分享"上个月报表"这类链接不丢
+  const [urlParams, setUrlParams] = useSearchParams()
+  const [range, setRange] = useState<[Dayjs, Dayjs]>(() => {
+    const f = urlParams.get('from')
+    const t = urlParams.get('to')
+    return f && t && dayjs(f).isValid() && dayjs(t).isValid() ? [dayjs(f), dayjs(t)] : PRESETS[1].range()
+  })
+  useEffect(() => {
+    setUrlParams(
+      { from: range[0].format('YYYY-MM-DD'), to: range[1].format('YYYY-MM-DD') },
+      { replace: true },
+    )
+  }, [range, setUrlParams])
   const params = useMemo(
     () => ({ startDate: range[0].format('YYYY-MM-DD'), endDate: range[1].format('YYYY-MM-DD') }),
     [range],

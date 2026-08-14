@@ -14,6 +14,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api, { assetUrl } from '../api/client'
 import { useAuth } from '../auth'
 import { EditNum, EditText } from '../components/EditableCells'
@@ -108,7 +109,9 @@ export default function ProductsPage() {
 
   const [types, setTypes] = useState<ProductType[]>([])
   const [typeFilter, setTypeFilter] = useState<number | 'all' | 'lowstock'>('all')
-  const [keyword, setKeyword] = useState('')
+  // ?kw= 初始关键词（Cmd+K 全局搜索跳转带过来的；只读初始值，输入过程不回写 URL）
+  const [urlParams] = useSearchParams()
+  const [keyword, setKeyword] = useState(() => urlParams.get('kw') ?? '')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [rows, setRows] = useState<ProductRow[]>([])

@@ -18,6 +18,11 @@ import StatementsPage from './pages/StatementsPage'
 import ImportPage from './pages/ImportPage'
 import SettingsPage from './pages/SettingsPage'
 
+// 仅开发环境注册的崩溃页：给 ErrorBoundary 的自动化测试用（生产构建不含此路由）
+function CrashForTest(): never {
+  throw new Error('ErrorBoundary 集成测试专用崩溃')
+}
+
 // 报表大屏对 staff 开放（与 App 报表中心一致），页内按卡片级隐藏利润/资金流水/员工业绩；
 // 设置页同理：员工只看到"修改我的密码"。
 export default function App() {
@@ -47,6 +52,7 @@ export default function App() {
         <Route path="statements" element={<StatementsPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        {import.meta.env.DEV && <Route path="__crash" element={<CrashForTest />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

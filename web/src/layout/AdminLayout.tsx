@@ -2,6 +2,7 @@ import { Drawer, Tooltip } from 'antd'
 import { DoubleLeftOutlined, DoubleRightOutlined } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import ErrorBoundary from '../components/ErrorBoundary'
+import CommandPalette from '../components/CommandPalette'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { T } from '../theme'
@@ -49,6 +50,19 @@ export default function AdminLayout() {
     navigate('/login', { replace: true })
   }
 
+  // Cmd/Ctrl+K 全局搜索
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   // 浏览器标签页标题跟随当前页（市面后台标配——多开几个 tab 时能分清哪个是哪个）
   useEffect(() => {
     const page = selected === '/' ? t('工作台', 'Dashboard') : (NAV.find((n) => n.key === selected)?.label ?? '')
@@ -83,7 +97,9 @@ export default function AdminLayout() {
           onLogout={doLogout}
           onOpenNav={lg ? undefined : () => setNavOpen(true)}
           onOpenPanel={wide ? (panelCollapsed ? togglePanel : undefined) : () => setDrawerOpen(true)}
+          onOpenSearch={() => setPaletteOpen(true)}
         />
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <div style={{ flex: 1, overflowY: 'auto', padding: lg ? '4px 32px 32px' : '4px 16px 24px' }}>
           {/* key=selected：切页面时重置错误状态，坏掉的页不拖累下一页 */}
           <ErrorBoundary key={selected}>
