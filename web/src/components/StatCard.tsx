@@ -44,8 +44,21 @@ export default function StatCard({
         >
           {icon}
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 500, color: T.secondary, marginBottom: 2 }}>{title}</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {/* nowrap 防线：容器再窄标题也不许一字一行竖排（zoom 特大 + 窄屏被截过图） */}
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: T.secondary,
+              marginBottom: 2,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {title}
+          </div>
           <div
             style={{
               fontSize: 24,

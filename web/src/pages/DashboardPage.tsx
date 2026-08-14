@@ -1,4 +1,4 @@
-import { Button, Col, Row, Typography } from 'antd'
+import { Button, Typography } from 'antd'
 import {
   AccountBookOutlined,
   AppstoreOutlined,
@@ -144,52 +144,46 @@ export default function DashboardPage() {
         </div>
       ) : (
         ov && (
-          <Row gutter={[20, 20]}>
-            <Col xs={12} xl={6}>
-              <StatCard
-                title="今日销售额"
-                value={<CountUp value={ov.todaySales} format={fmtMoney} />}
-                icon={<AccountBookOutlined />}
-                trend={trend.sales}
-              />
-            </Col>
-            <Col xs={12} xl={6}>
-              <StatCard
-                title="今日订单数"
-                value={<CountUp value={ov.todayOrderCount} />}
-                icon={<ShoppingOutlined />}
-                trend={trend.orders}
-              />
-            </Col>
+          // CSS grid auto-fit 而非 antd Col：Col 断点走媒体查询，感知不到「文字特大」的
+          // body zoom——zoom 1.25 时仍硬排 4 列，每张卡被挤到 130px，标题一字一行竖排。
+          // minmax 按真实可用宽度自动决定一行几张，zoom/窄屏都正确响应。
+          // minmax 195：1500 视口（含右栏）恰好一行 4 张；再窄/字号特大时自动降列数
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(195px, 1fr))', gap: 20 }}>
+            <StatCard
+              title="今日销售额"
+              value={<CountUp value={ov.todaySales} format={fmtMoney} />}
+              icon={<AccountBookOutlined />}
+              trend={trend.sales}
+            />
+            <StatCard
+              title="今日订单数"
+              value={<CountUp value={ov.todayOrderCount} />}
+              icon={<ShoppingOutlined />}
+              trend={trend.orders}
+            />
             {isAdmin ? (
-              <Col xs={12} xl={6}>
-                <StatCard
-                  title="今日毛利"
-                  value={<CountUp value={ov.todayProfit} format={fmtMoney} />}
-                  icon={<RiseOutlined />}
-                  note={
-                    ov.profitUnreliable
-                      ? `其中 ${fmtMoney(ov.noCostSales)} 的货没填进价（${ov.noCostProductNames
-                          .slice(0, 2)
-                          .join('、')}${ov.noCostProductNames.length > 2 ? '…' : ''}）`
-                      : undefined
-                  }
-                />
-              </Col>
-            ) : (
-              <Col xs={12} xl={6}>
-                <StatCard title="在售商品" value={<CountUp value={ov.productCount} />} icon={<AppstoreOutlined />} />
-              </Col>
-            )}
-            <Col xs={12} xl={6}>
               <StatCard
-                title="库存预警"
-                value={<CountUp value={ov.lowStockCount} />}
-                icon={<WarningOutlined />}
-                alert={ov.lowStockCount > 0}
+                title="今日毛利"
+                value={<CountUp value={ov.todayProfit} format={fmtMoney} />}
+                icon={<RiseOutlined />}
+                note={
+                  ov.profitUnreliable
+                    ? `其中 ${fmtMoney(ov.noCostSales)} 的货没填进价（${ov.noCostProductNames
+                        .slice(0, 2)
+                        .join('、')}${ov.noCostProductNames.length > 2 ? '…' : ''}）`
+                    : undefined
+                }
               />
-            </Col>
-          </Row>
+            ) : (
+              <StatCard title="在售商品" value={<CountUp value={ov.productCount} />} icon={<AppstoreOutlined />} />
+            )}
+            <StatCard
+              title="库存预警"
+              value={<CountUp value={ov.lowStockCount} />}
+              icon={<WarningOutlined />}
+              alert={ov.lowStockCount > 0}
+            />
+          </div>
         )
       )}
       <SalesTrendChart data={series} range={range} loading={chartLoading} onRangeChange={setRange} />

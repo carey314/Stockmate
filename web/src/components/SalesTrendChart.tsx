@@ -136,6 +136,7 @@ export default function SalesTrendChart({
                 borderRadius: 999,
                 fontSize: 12.5,
                 fontWeight: 600,
+                whiteSpace: 'nowrap', // 特大字号+窄宽下"7 天"曾被挤成两行
                 cursor: 'pointer',
                 background: range === r ? T.surfaceContainerLow : T.surfaceContainer,
                 color: range === r ? T.primary : T.secondary,
