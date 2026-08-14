@@ -1,6 +1,13 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { App, Button, Form, Input, Typography } from 'antd'
-import { LockOutlined, UserOutlined } from '@ant-design/icons'
+import {
+  AudioOutlined,
+  BarChartOutlined,
+  LockOutlined,
+  MobileOutlined,
+  ThunderboltOutlined,
+  UserOutlined,
+} from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { T, primaryRgba } from '../theme'
@@ -10,10 +17,11 @@ import logoImg from '../assets/logo.png'
 
 // 登录页：桌面左右分栏（左=品牌价值面，右=表单），<900px 回落单卡居中。
 // 左面卖点文案与提审文案口径一致（docs/appstore-listing.md），不许吹没有的功能。
-const SELLING_POINTS: [string, string, string][] = [
-  ['✨', '30 秒配成自己行业', 'AI 帮你把品类、字段、规格都配好'],
-  ['🎙️', '口述记账，一句话成单', '"老王拿了两件泸州老窖收了微信"'],
-  ['📊', '报表、欠款、对账单', '一应俱全，打印给客户看也体面'],
+// 图标用整站同款 antd 线性图标——emoji 在品牌面上显廉价（用户原话"很 low"）。
+const SELLING_POINTS: [ReactNode, string, string][] = [
+  [<ThunderboltOutlined key="t" />, '30 秒配成自己行业', 'AI 帮你把品类、字段、规格都配好'],
+  [<AudioOutlined key="a" />, '口述记账，一句话成单', '“老王拿了两件泸州老窖收了微信”'],
+  [<BarChartOutlined key="b" />, '报表、欠款、对账单', '一应俱全，打印给客户看也体面'],
 ]
 
 export default function LoginPage() {
@@ -192,23 +200,37 @@ export default function LoginPage() {
           <div style={{ fontSize: 14.5, opacity: 0.82, marginBottom: 44 }}>
             {t('手机 App 开单收钱，电脑后台管货看账——同一个账号。', 'Sell on the phone, manage on the desktop — one account.')}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-            {SELLING_POINTS.map(([emoji, title, desc], i) => (
+          {/* 玻璃卡包住卖点组：比松散列表更有整体感 */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 24,
+              padding: '26px 24px',
+              borderRadius: 20,
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.16)',
+              backdropFilter: 'blur(10px)',
+            }}
+          >
+            {SELLING_POINTS.map(([icon, title, desc], i) => (
               <div key={i} className="fade-up" style={{ display: 'flex', gap: 14, animationDelay: `${120 + i * 90}ms` }}>
                 <div
                   style={{
                     width: 40,
                     height: 40,
                     borderRadius: 12,
-                    background: 'rgba(255,255,255,0.13)',
+                    background: 'rgba(255,255,255,0.12)',
+                    border: '1px solid rgba(255,255,255,0.2)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: 18,
+                    fontSize: 17,
+                    color: '#fff',
                     flexShrink: 0,
                   }}
                 >
-                  {emoji}
+                  {icon}
                 </div>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 700 }}>{title}</div>
@@ -217,7 +239,30 @@ export default function LoginPage() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 48, fontSize: 12, opacity: 0.6 }}>
+          {/* App 下载引导占位：还在审核，放链接就是死链——上架后这里原位换成下载二维码 */}
+          <div
+            className="fade-up"
+            style={{
+              marginTop: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '14px 24px',
+              borderRadius: 16,
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px dashed rgba(255,255,255,0.25)',
+              animationDelay: '400ms',
+            }}
+          >
+            <MobileOutlined style={{ fontSize: 18, opacity: 0.85 }} />
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('iPhone App 审核上架中', 'iPhone app coming soon')}</div>
+              <div style={{ fontSize: 12, opacity: 0.65 }}>
+                {t('扫码开单、语音记账都在手机上——上架后这里放下载二维码', 'Scan-to-sell and voice entry live on mobile — QR code here once live')}
+              </div>
+            </div>
+          </div>
+          <div style={{ marginTop: 28, fontSize: 12, opacity: 0.6 }}>
             {t('数据永远是你的：随时全量导出带走，永久免费。', 'Your data is always yours — export everything, free forever.')}
           </div>
         </div>
