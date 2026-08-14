@@ -213,6 +213,23 @@ export default function ProductsPage() {
   )
   const selectedSkuCount = selectedProducts.reduce((n, p) => n + p.skus.length, 0)
 
+  // ===== 批量删除（仅老板；复用单删接口=复用软删守卫，逐个报成败不静默吞）=====
+  const [batchDeleting, setBatchDeleting] = useState(false)
+  const batchDelete = async () => {
+    setBatchDeleting(true)
+    try {
+      const results = await Promise.allSettled(selectedKeys.map((id) => api.delete(`/products/${id}`)))
+      const okN = results.filter((r) => r.status === 'fulfilled').length
+      const failN = results.length - okN
+      if (failN === 0) message.success(`已删除 ${okN} 个商品`)
+      else message.warning(`删除 ${okN} 个成功，${failN} 个失败（${(results.find((r) => r.status === 'rejected') as PromiseRejectedResult)?.reason?.message ?? ''}）`)
+      setSelectedKeys([])
+      load()
+    } finally {
+      setBatchDeleting(false)
+    }
+  }
+
   const runBatch = async () => {
     const { mode, value } = await batchForm.validateFields()
     if (!value) return
@@ -722,6 +739,19 @@ export default function ProductsPage() {
           <Button type="primary" size="small" onClick={() => setBatchOpen(true)}>
             批量改价
           </Button>
+          {isAdmin && (
+            <Popconfirm
+              title={`删除选中的 ${selectedKeys.length} 个商品？`}
+              description="软删除：历史单据和报表保留原名，删后不可再开单卖它"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={batchDelete}
+            >
+              <Button size="small" danger loading={batchDeleting}>
+                批量删除
+              </Button>
+            </Popconfirm>
+          )}
           <Button size="small" onClick={() => setSelectedKeys([])}>
             取消选择
           </Button>

@@ -2,6 +2,7 @@ import { Alert, App, Button, Checkbox, Empty, Input, Select, Table, Tag, Typogra
 import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
+import { useAuth } from '../auth'
 import { fmtMoney, fmtQty } from '../lib/format'
 import { T, cardStyle } from '../theme'
 
@@ -85,6 +86,20 @@ export default function QuickEntryPage() {
   const [purEdit, setPurEdit] = useState<Record<number, { on: boolean; unitCost: number | null }>>({})
   const [expOn, setExpOn] = useState<Record<number, boolean>>({})
   const [aggOn, setAggOn] = useState<Record<number, boolean>>({})
+  // 没档案的商品「顺便建档」勾选（键 s0/p1…）——建档后销售真扣库存、进货真入库
+  const [buildFile, setBuildFile] = useState<Record<string, boolean>>({})
+
+  // 建档要归到哪个品类：主营品类优先，没有就第一个品类；一个品类都没有则禁用建档
+  const { profile } = useAuth()
+  const [types, setTypes] = useState<{ id: number; name: string }[]>([])
+  useEffect(() => {
+    api
+      .get<{ id: number; name: string }[] | { list: { id: number; name: string }[] }>('/product-types')
+      .then((d) => setTypes(Array.isArray(d) ? d : d.list))
+      .catch(() => {})
+  }, [])
+  const createTypeId = profile?.mainTypeId ?? types[0]?.id ?? null
+  const createTypeName = types.find((x) => x.id === createTypeId)?.name
 
   const parse = async () => {
     if (text.trim().length < 2) return message.warning('先写点内容')
@@ -110,12 +125,15 @@ export default function QuickEntryPage() {
 
   const commit = async () => {
     if (!resp) return
-    // 按索引组装（filter 会丢索引，先配对再过滤）
+    // 按索引组装（filter 会丢索引，先配对再过滤）；
+    // 「顺便建档」由 confirm-entry 后端处理（createProduct，与进货同构、绕过品类必填字段）
     const salesBody = resp.sales
-      .map((s, i) => ({ s, e: saleEdit[i] }))
+      .map((s, i) => ({ s, e: saleEdit[i], i }))
       .filter((x) => x.e?.on)
-      .map(({ s, e }) => ({
+      .map(({ s, e, i }) => ({
         skuId: s.suggestedSkuId ?? null,
+        createProduct: !s.matchedProduct && !!buildFile[`s${i}`] && !!createTypeId,
+        productTypeId: !s.matchedProduct && buildFile[`s${i}`] ? createTypeId : null,
         customerId: s.customer?.id ?? null,
         paid: e.paid,
         name: s.name,
@@ -125,12 +143,13 @@ export default function QuickEntryPage() {
         unitPrice: e.unitPrice,
       }))
     const purchasesBody = resp.purchases
-      .map((p, i) => ({ p, e: purEdit[i] }))
+      .map((p, i) => ({ p, e: purEdit[i], i }))
       .filter((x) => x.e?.on)
-      .map(({ p, e }) => ({
+      .map(({ p, e, i }) => ({
         productId: p.matchedProduct?.id ?? null,
-        createProduct: false, // Web 版不在这里现建商品，未匹配的先只按名字记（后端按无 productId 处理）
-        productTypeId: null,
+        // 勾了「顺便建档」→ 后端建商品并按这单入库（confirm-entry 原生支持）
+        createProduct: !p.matchedProduct && !!buildFile[`p${i}`] && !!createTypeId,
+        productTypeId: !p.matchedProduct && buildFile[`p${i}`] ? createTypeId : null,
         name: p.name,
         quantity: p.quantity,
         unit: p.unit || '件',
@@ -205,10 +224,26 @@ export default function QuickEntryPage() {
                   },
                   {
                     title: '商品',
-                    render: (_, s) => (
+                    render: (_, s, i) => (
                       <span>
                         {s.name} <span style={{ color: T.secondary }}>×{fmtQty(s.quantity)}{s.unit}</span>
-                        {s.matchedProduct ? <Tag color="green" style={{ marginLeft: 6 }}>已认出</Tag> : <Tag color="orange" style={{ marginLeft: 6 }}>没档案·只记收入</Tag>}
+                        {s.matchedProduct ? (
+                          <Tag color="green" style={{ marginLeft: 6 }}>已认出</Tag>
+                        ) : (
+                          <>
+                            <Tag color="orange" style={{ marginLeft: 6 }}>没档案·只记收入</Tag>
+                            <Checkbox
+                              checked={!!buildFile[`s${i}`]}
+                              disabled={!createTypeId}
+                              onChange={(e) => setBuildFile((p) => ({ ...p, [`s${i}`]: e.target.checked }))}
+                              style={{ marginLeft: 4, fontSize: 12 }}
+                            >
+                              <span style={{ fontSize: 12 }}>
+                                {createTypeId ? `顺便建档到「${createTypeName}」并扣库存` : '先建品类才能建档'}
+                              </span>
+                            </Checkbox>
+                          </>
+                        )}
                       </span>
                     ),
                   },
@@ -229,14 +264,20 @@ export default function QuickEntryPage() {
                   },
                   {
                     title: '收款',
-                    width: 96,
-                    render: (_, __, i) => (
+                    width: 132,
+                    render: (_, s, i) => (
                       <Select
                         size="small"
                         value={saleEdit[i]?.paid === true ? 'paid' : saleEdit[i]?.paid === false ? 'credit' : 'unknown'}
                         onChange={(v) => setSaleEdit((p) => ({ ...p, [i]: { ...p[i], paid: v === 'paid' ? true : v === 'credit' ? false : null } }))}
-                        options={[{ value: 'paid', label: '已收' }, { value: 'credit', label: '挂账' }, { value: 'unknown', label: '没提' }]}
-                        style={{ width: 84 }}
+                        options={[
+                          { value: 'paid', label: '已收' },
+                          { value: 'credit', label: '挂账' },
+                          // "没提"=口述里没说收没收钱。落账默认：散客当场结清、记名客户挂账——把结果直接写在脸上。
+                          // 注意 AI 会把口述里的"散客"二字匹配到内置散客档案，它不算记名客户
+                          { value: 'unknown', label: s.customer && s.customer.name !== '散客' ? '没提·按挂账' : '没提·按已收' },
+                        ]}
+                        style={{ width: 120 }}
                       />
                     ),
                   },
@@ -256,10 +297,26 @@ export default function QuickEntryPage() {
                   { title: '入账', width: 50, render: (_, __, i) => <Checkbox checked={purEdit[i]?.on} onChange={(e) => setPurEdit((p) => ({ ...p, [i]: { ...p[i], on: e.target.checked } }))} /> },
                   {
                     title: '商品',
-                    render: (_, p) => (
+                    render: (_, p, i) => (
                       <span>
                         {p.name} <span style={{ color: T.secondary }}>×{fmtQty(p.quantity)}{p.unit}</span>
-                        {p.matchedProduct ? <Tag color="green" style={{ marginLeft: 6 }}>已认出</Tag> : <Tag color="orange" style={{ marginLeft: 6 }}>没档案·只记花销</Tag>}
+                        {p.matchedProduct ? (
+                          <Tag color="green" style={{ marginLeft: 6 }}>已认出</Tag>
+                        ) : (
+                          <>
+                            <Tag color="orange" style={{ marginLeft: 6 }}>没档案·只记花销</Tag>
+                            <Checkbox
+                              checked={!!buildFile[`p${i}`]}
+                              disabled={!createTypeId}
+                              onChange={(e) => setBuildFile((prev) => ({ ...prev, [`p${i}`]: e.target.checked }))}
+                              style={{ marginLeft: 4 }}
+                            >
+                              <span style={{ fontSize: 12 }}>
+                                {createTypeId ? `顺便建档到「${createTypeName}」并入库` : '先建品类才能建档'}
+                              </span>
+                            </Checkbox>
+                          </>
+                        )}
                       </span>
                     ),
                   },

@@ -260,6 +260,8 @@ const confirmSchema = z.object({
     .array(
       z.object({
         skuId: z.number().int().nullish(), // 有 = 真实扣库存开单；无 = 只记收入
+        createProduct: z.boolean().default(false), // 无档案时"顺便建档"（与 purchases 同构）
+        productTypeId: z.number().int().nullish(),
         customerId: z.number().int().nullish(), // 卖给谁（null=散客）
         paid: z.boolean().nullish(), // 收没收到钱（null=没提）
         name: z.string().min(1),
@@ -362,6 +364,33 @@ exports.confirmEntry = async (req, res) => {
       inbounded.push({ productId, name: item.name, quantity: qty });
     }
 
+    // ---- 卖出前置：勾了「顺便建档」的先建商品档案（与进货 createProduct 同构，
+    // 绕过品类必填字段——口述场景先记上、信息后补），建完拿默认规格按真库存单走。
+    // 只带卖价，绝不把卖价当成本（AI 不编成本铁律同样适用于建档）。
+    for (const item of data.sales) {
+      if (item.skuId == null && item.createProduct) {
+        if (!item.productTypeId) throw httpError(400, `新商品「${item.name}」缺少品类`);
+        const ownedType = await tx.productType.findFirst({ where: { id: item.productTypeId, isDeleted: 0 } }); // 本店归属校验
+        if (!ownedType) throw httpError(404, '品类不存在');
+        const price =
+          item.unitPrice ?? (item.totalAmount && item.quantity ? Math.round((item.totalAmount / item.quantity) * 100) / 100 : 0);
+        const code = `P${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 90 + 10)}`;
+        const p = await tx.product.create({
+          data: { code, name: item.name, productTypeId: item.productTypeId, unit: item.unit, defaultPrice: price, customFields: '{}' },
+        });
+        const sku = await tx.sku.create({
+          data: {
+            productId: p.id,
+            code,
+            price,
+            isDefault: 1,
+            inventory: { create: { storeId: getTenantId(), productId: p.id, quantity: 0, minQuantity: 0 } }, // 嵌套 create 不走扩展层注入
+          },
+        });
+        item.skuId = sku.id;
+      }
+    }
+
     // ---- 卖出：按客户分组开单（"老王拿两件"挂老王，没提客户的挂散客）----
     const { resolvePriceForCustomer } = require('./pricing');
     const stockSales = data.sales.filter((s) => s.skuId != null);
@@ -374,10 +403,13 @@ exports.confirmEntry = async (req, res) => {
 
       const allowNegative = await isNegativeStockAllowed();
       for (const [custKey, salesGroup] of Object.entries(byCustomer)) {
-        const isNamedCustomer = Number(custKey) > 0;
+        let isNamedCustomer = Number(custKey) > 0;
         if (isNamedCustomer) {
           const ownedCust = await tx.customer.findFirst({ where: { id: Number(custKey), isDeleted: 0 } }); // 本店归属校验
           if (!ownedCust) throw httpError(404, '客户不存在');
+          // 口述里明说"散客"时 AI 会把它匹配到内置散客档案（customerId>0）——
+          // 它不是记名客户，仍按散客规则当场结清，否则这单会被错误挂账（挂给"散客"的账没法追）
+          if (ownedCust.name === '散客') isNamedCustomer = false;
         }
         const customerId = Number(custKey) || (await getWalkInCustomer(tx)).id;
         const resolved = [];
