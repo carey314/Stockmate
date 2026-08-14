@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { App, Button, Form, Input, Typography } from 'antd'
 import {
   AudioOutlined,
@@ -14,6 +14,7 @@ import { T, primaryRgba } from '../theme'
 import { t } from '../lib/i18n'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import logoImg from '../assets/logo.png'
+import UserCursor from '../components/UserCursor'
 
 // 登录页：桌面左右分栏（左=品牌价值面，右=表单），<900px 回落单卡居中。
 // 左面卖点文案与提审文案口径一致（docs/appstore-listing.md），不许吹没有的功能。
@@ -26,11 +27,39 @@ const SELLING_POINTS: [ReactNode, string, string][] = [
 
 export default function LoginPage() {
   const { login } = useAuth()
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const navigate = useNavigate()
   const location = useLocation()
   const [loading, setLoading] = useState(false)
   const wide = useMediaQuery('(min-width: 900px)')
+  const brandRef = useRef<HTMLDivElement>(null)
+
+  // 忘记密码：没有短信/邮箱验证通道（注册不强制手机号），自助重置无法核身——
+  // 员工走老板代重置（已有功能），老板走人工核实。别做"输入用户名直接重置"那种裸接口。
+  const showForgot = () =>
+    modal.info({
+      title: t('忘记密码怎么办？', 'Forgot your password?'),
+      okText: t('知道了', 'Got it'),
+      content: (
+        <div style={{ fontSize: 13, lineHeight: '22px' }}>
+          <p style={{ margin: '8px 0' }}>
+            <b>{t('员工账号：', 'Staff account: ')}</b>
+            {t('请店主在「设置 → 员工管理 → 重置密码」里帮你重置（手机 App 和网页后台都能操作）。', 'ask the owner to reset it under Settings → Staff → Reset password (app or web).')}
+          </p>
+          <p style={{ margin: '8px 0' }}>
+            <b>{t('店主账号：', 'Owner account: ')}</b>
+            {t('请通过', 'contact us via the ')}
+            <a href="https://qxju.shop/stockmate/support" target="_blank" rel="noreferrer">
+              {t('帮助与支持页', 'support page')}
+            </a>
+            {t('联系我们，附上店名和注册用户名，人工核实后为你重置。', ' with your shop name and username; we will verify and reset it for you.')}
+          </p>
+          <p style={{ margin: '8px 0', color: '#888' }}>
+            {t('用 Apple 登录的账号不需要密码。', 'Accounts using Sign in with Apple don’t need a password.')}
+          </p>
+        </div>
+      ),
+    })
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true)
@@ -76,9 +105,14 @@ export default function LoginPage() {
           {t('登 录', 'Sign in')}
         </Button>
       </Form.Item>
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {t('账号与手机 App 通用，暂不支持在网页注册。', 'Accounts are shared with the mobile app. Sign-up is app-only for now.')}
-      </Typography.Text>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {t('账号与手机 App 通用，暂不支持在网页注册。', 'Accounts are shared with the mobile app.')}
+        </Typography.Text>
+        <a onClick={showForgot} style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+          {t('忘记密码？', 'Forgot password?')}
+        </a>
+      </div>
     </Form>
   )
 
@@ -133,8 +167,9 @@ export default function LoginPage() {
   // 桌面：左品牌面 + 右表单
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: T.surface }}>
-      {/* 左：品牌价值面 */}
+      {/* 左：品牌价值面（区域内替换成 UserCursor 协作光标，cursor:none；右侧表单保持原生光标） */}
       <div
+        ref={brandRef}
         style={{
           flex: 1.1,
           background: `linear-gradient(150deg, ${T.primary} 0%, ${T.primaryContainer} 70%, ${T.primaryFixed} 160%)`,
@@ -145,8 +180,10 @@ export default function LoginPage() {
           padding: 'min(7vw, 96px)',
           position: 'relative',
           overflow: 'hidden',
+          cursor: 'none',
         }}
       >
+        <UserCursor containerRef={brandRef} label={t('老板好 👋', 'Hey boss 👋')} textColor={T.primary} />
         {/* 装饰光斑 */}
         <div
           style={{

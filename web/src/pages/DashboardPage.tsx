@@ -151,20 +151,22 @@ export default function DashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(195px, 1fr))', gap: 20 }}>
             <StatCard
               title="今日销售额"
-              value={<CountUp value={ov.todaySales} format={fmtMoney} />}
+              value={<CountUp value={ov.todaySales} format={fmtMoney} speedBlur />}
               icon={<AccountBookOutlined />}
               trend={trend.sales}
+              spark={series?.map((s) => s.sales)}
             />
             <StatCard
               title="今日订单数"
               value={<CountUp value={ov.todayOrderCount} />}
               icon={<ShoppingOutlined />}
               trend={trend.orders}
+              spark={series?.map((s) => s.orders)}
             />
             {isAdmin ? (
               <StatCard
                 title="今日毛利"
-                value={<CountUp value={ov.todayProfit} format={fmtMoney} />}
+                value={<CountUp value={ov.todayProfit} format={fmtMoney} speedBlur />}
                 icon={<RiseOutlined />}
                 note={
                   ov.profitUnreliable

@@ -259,11 +259,11 @@ export default function CalendarPage() {
         <span style={{ marginLeft: 'auto', fontSize: 13, color: T.secondary }}>
           {view === 'month' ? '本月' : '本周'}收入{' '}
           <b style={{ color: GREEN }}>
-            <CountUp value={sum.income} format={fmtMoney} />
+            <CountUp value={sum.income} format={fmtMoney} speedBlur />
           </b>{' '}
           · 支出{' '}
           <b style={{ color: RED }}>
-            <CountUp value={sum.expense} format={fmtMoney} />
+            <CountUp value={sum.expense} format={fmtMoney} speedBlur />
           </b>{' '}
           · 净{' '}
           <b style={{ color: netColor(sumNet) }}>

@@ -1,6 +1,7 @@
 import { CaretDownOutlined, CaretUpOutlined } from '@ant-design/icons'
 import { T, cardStyle } from '../theme'
 import SpotlightCard from './SpotlightCard'
+import Sparkline from './Sparkline'
 
 // 原型 _3 指标卡：图标圆片 48px + 标签 + 大数字 + 彩色趋势
 // 数字独占一行、趋势固定在数字下方一行——曾试过"同行 + flexWrap"，
@@ -14,6 +15,7 @@ export default function StatCard({
   trendLabel = '较前一日',
   alert,
   note,
+  spark,
 }: {
   title: string
   value: React.ReactNode
@@ -22,11 +24,12 @@ export default function StatCard({
   trendLabel?: string
   alert?: boolean
   note?: string // 卡底红字提示（毛利不可靠等）
+  spark?: number[] // 迷你趋势线（近 N 日走势）；窄卡自动隐藏（container query）
 }) {
   const up = (trend ?? 0) > 0
   const flat = trend === 0
   return (
-    <SpotlightCard style={{ ...cardStyle, padding: '20px 24px', overflow: 'hidden' }}>
+    <SpotlightCard style={{ ...cardStyle, padding: '20px 24px', overflow: 'hidden', position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <div
           style={{
@@ -99,6 +102,13 @@ export default function StatCard({
             )}
           </div>
         </div>
+        {/* 迷你趋势线做成右下角低透明度水印：不占布局，窄卡也能放（曾用容器查询挤在行尾，
+            常态宽度下直接被藏没了） */}
+        {spark && spark.length >= 2 && (
+          <div className="stat-spark" style={{ position: 'absolute', right: 14, bottom: 10, opacity: 0.55, pointerEvents: 'none' }}>
+            <Sparkline data={spark} color={alert ? T.error : T.primary} />
+          </div>
+        )}
       </div>
       {note && (
         <div style={{ fontSize: 12, color: T.error, marginTop: 8, lineHeight: '17px' }}>{note}</div>
