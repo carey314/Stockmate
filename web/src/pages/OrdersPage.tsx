@@ -5,6 +5,7 @@ import {
   Drawer,
   Empty,
   Form,
+  Input,
   InputNumber,
   Modal,
   Popconfirm,
@@ -68,6 +69,7 @@ export default function OrdersPage() {
     const t = urlParams.get('to')
     return f && t && dayjs(f).isValid() && dayjs(t).isValid() ? [dayjs(f), dayjs(t)] : null
   })
+  const [kw, setKw] = useState(() => urlParams.get('kw') ?? '') // 模糊查单号/客户
   useEffect(() => {
     setUrlParams(
       (prev) => {
@@ -81,11 +83,13 @@ export default function OrdersPage() {
           p.delete('from')
           p.delete('to')
         }
+        if (kw) p.set('kw', kw)
+        else p.delete('kw')
         return p
       },
       { replace: true },
     )
-  }, [filter, range, setUrlParams])
+  }, [filter, range, kw, setUrlParams])
   const [rows, setRows] = useState<OrderRow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -101,6 +105,7 @@ export default function OrdersPage() {
         ...(filter === 'unpaid' ? { unpaidOnly: 1 } : {}),
         ...(filter === 'cancelled' ? { status: 'cancelled' } : {}),
         ...(range ? { startDate: range[0].format('YYYY-MM-DD'), endDate: range[1].format('YYYY-MM-DD') } : {}),
+        ...(kw ? { keyword: kw } : {}),
       })
       setRows(data.list)
       setTotal(data.pagination.total)
@@ -109,7 +114,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, filter, range, message])
+  }, [page, pageSize, filter, range, kw, message])
   useEffect(() => {
     load()
   }, [load])
@@ -272,6 +277,16 @@ export default function OrdersPage() {
             setRange(v && v[0] && v[1] ? [v[0], v[1]] : null)
             setPage(1)
           }}
+        />
+        <Input.Search
+          placeholder="搜单号 / 客户名"
+          allowClear
+          defaultValue={kw}
+          onSearch={(v) => {
+            setKw(v.trim())
+            setPage(1)
+          }}
+          style={{ width: 210 }}
         />
         <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 'auto' }}>
           开单在手机 App 更顺手（扫码/语音）；这里管理已开的单：收欠款、退货、作废

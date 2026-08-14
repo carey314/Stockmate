@@ -1,5 +1,5 @@
 import { Empty, Input, Modal, Spin } from 'antd'
-import { AppstoreOutlined, ArrowRightOutlined, TeamOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, ArrowRightOutlined, ProfileOutlined, TeamOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
@@ -8,8 +8,8 @@ import { NAV } from '../layout/SideNav'
 import { T, primaryRgba } from '../theme'
 import { t } from '../lib/i18n'
 
-// Cmd+K 全局搜索：页面导航 + 商品 + 客户，↑↓ 选择 Enter 跳转。
-// 订单号搜索没做——后端 orders.list 不支持 keyword，等接口再加（不做前端假搜索）。
+// Cmd+K 全局搜索：页面导航 + 商品 + 客户 + 订单（单号/客户名模糊），↑↓ 选择 Enter 跳转。
+// 订单结果走 /orders?id= 深链直接打开详情抽屉。
 interface Item {
   key: string
   group: string
@@ -53,7 +53,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
       }
       setBusy(true)
       try {
-        const [prods, custs] = await Promise.all([
+        const [prods, custs, ords] = await Promise.all([
           api
             .get<{ list: { id: number; name: string; code: string }[] }>('/products', { keyword: kw, pageSize: 5 })
             .catch(() => ({ list: [] })),
@@ -62,6 +62,12 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
               keyword: kw,
               pageSize: 5,
             })
+            .catch(() => ({ list: [] })),
+          api
+            .get<{ list: { id: number; orderNo: string; actualAmount: number; customer: { name: string } | null }[] }>(
+              '/orders',
+              { keyword: kw, pageSize: 5 },
+            )
             .catch(() => ({ list: [] })),
         ])
         const prodItems: Item[] = prods.list.map((p) => ({
@@ -80,7 +86,15 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
           desc: c.owed > 0 ? `${t('欠', 'Owes')} ¥${c.owed}` : (c.phone ?? undefined),
           go: () => jump(`/partners?kw=${encodeURIComponent(c.name)}`),
         }))
-        setItems([...navItems, ...prodItems, ...custItems])
+        const ordItems: Item[] = ords.list.map((o) => ({
+          key: `o${o.id}`,
+          group: t('订单', 'Orders'),
+          icon: <ProfileOutlined />,
+          title: o.orderNo,
+          desc: `${o.customer?.name ?? t('散客', 'Walk-in')} · ¥${o.actualAmount}`,
+          go: () => jump(`/orders?id=${o.id}`),
+        }))
+        setItems([...navItems, ...prodItems, ...custItems, ...ordItems])
         setActive(0)
       } finally {
         setBusy(false)

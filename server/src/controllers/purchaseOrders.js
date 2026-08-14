@@ -124,9 +124,11 @@ exports.create = async (req, res) => {
 };
 
 exports.list = async (req, res) => {
-  const { page = 1, pageSize = 20, supplierId, startDate, endDate, unpaidOnly } = req.query;
+  const { page = 1, pageSize = 20, supplierId, startDate, endDate, unpaidOnly, keyword } = req.query;
   const where = {
     ...(supplierId ? { supplierId: Number(supplierId) } : {}),
+    // 模糊查询：单号或供应商名（Web 列表搜索框用）
+    ...(keyword ? { OR: [{ orderNo: { contains: keyword } }, { supplier: { name: { contains: keyword } } }] } : {}),
     ...(startDate || endDate
       ? {
           createdAt: {

@@ -85,6 +85,7 @@ export default function PurchasePage() {
     const t = urlParams.get('to')
     return f && t && dayjs(f).isValid() && dayjs(t).isValid() ? [dayjs(f), dayjs(t)] : null
   })
+  const [kw, setKw] = useState(() => urlParams.get('kw') ?? '') // 模糊查单号/供应商
   useEffect(() => {
     setUrlParams(
       (prev) => {
@@ -98,11 +99,13 @@ export default function PurchasePage() {
           p.delete('from')
           p.delete('to')
         }
+        if (kw) p.set('kw', kw)
+        else p.delete('kw')
         return p
       },
       { replace: true },
     )
-  }, [filter, range, setUrlParams])
+  }, [filter, range, kw, setUrlParams])
   const [rows, setRows] = useState<PORow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -120,6 +123,7 @@ export default function PurchasePage() {
         ...(filter === 'unpaid' ? { unpaidOnly: 1 } : {}),
         ...(filter === 'cancelled' ? { status: 'cancelled' } : {}),
         ...(range ? { startDate: range[0].format('YYYY-MM-DD'), endDate: range[1].format('YYYY-MM-DD') } : {}),
+        ...(kw ? { keyword: kw } : {}),
       })
       // 后端 unpaidOnly 是取完当页再 filter，前端 cancelled 也可能混入；按当前筛选二次收敛显示
       let list = data.list
@@ -131,7 +135,7 @@ export default function PurchasePage() {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, filter, range, message])
+  }, [page, pageSize, filter, range, kw, message])
   useEffect(() => {
     load()
   }, [load])
@@ -351,6 +355,16 @@ export default function PurchasePage() {
             setRange(v && v[0] && v[1] ? [v[0], v[1]] : null)
             setPage(1)
           }}
+        />
+        <Input.Search
+          placeholder="搜单号 / 供应商"
+          allowClear
+          defaultValue={kw}
+          onSearch={(v) => {
+            setKw(v.trim())
+            setPage(1)
+          }}
+          style={{ width: 200 }}
         />
         <Button type="primary" icon={<PlusOutlined />} style={{ marginLeft: 'auto' }} onClick={() => setCreateOpen(true)}>
           新建进货单

@@ -155,10 +155,12 @@ exports.create = async (req, res) => {
 };
 
 exports.list = async (req, res) => {
-  const { page = 1, pageSize = 20, customerId, status, startDate, endDate, unpaidOnly } = req.query;
+  const { page = 1, pageSize = 20, customerId, status, startDate, endDate, unpaidOnly, keyword } = req.query;
   const where = {
     ...(customerId ? { customerId: Number(customerId) } : {}),
     ...(status ? { status } : {}),
+    // 模糊查询：单号或客户名（Web 列表搜索框 / Cmd+K 全局搜索用）
+    ...(keyword ? { OR: [{ orderNo: { contains: keyword } }, { customer: { name: { contains: keyword } } }] } : {}),
     ...(startDate || endDate
       ? {
           createdAt: {
