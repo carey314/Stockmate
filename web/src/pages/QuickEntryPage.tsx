@@ -1,5 +1,5 @@
-import { Alert, App, Button, Checkbox, Empty, Input, Select, Table, Tag, Typography } from 'antd'
-import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { Alert, App, Button, Checkbox, Empty, Input, Select, Table, Tag, Tooltip, Typography } from 'antd'
+import { CheckCircleOutlined, QuestionCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../auth'
@@ -263,21 +263,28 @@ export default function QuickEntryPage() {
                     ),
                   },
                   {
-                    title: '收款',
-                    width: 132,
+                    // 列头解释规则，选项里只说结果——"没提"这种系统视角的词用户看不懂
+                    title: (
+                      <span>
+                        收款{' '}
+                        <Tooltip title="口述里没说收没收钱时：散客默认按已收款，记名客户默认记挂账（月结常态，防止把没收的钱记成收了）">
+                          <QuestionCircleOutlined style={{ color: T.secondary, fontSize: 12 }} />
+                        </Tooltip>
+                      </span>
+                    ),
+                    width: 140,
                     render: (_, s, i) => (
                       <Select
                         size="small"
                         value={saleEdit[i]?.paid === true ? 'paid' : saleEdit[i]?.paid === false ? 'credit' : 'unknown'}
                         onChange={(v) => setSaleEdit((p) => ({ ...p, [i]: { ...p[i], paid: v === 'paid' ? true : v === 'credit' ? false : null } }))}
                         options={[
-                          { value: 'paid', label: '已收' },
-                          { value: 'credit', label: '挂账' },
-                          // "没提"=口述里没说收没收钱。落账默认：散客当场结清、记名客户挂账——把结果直接写在脸上。
-                          // 注意 AI 会把口述里的"散客"二字匹配到内置散客档案，它不算记名客户
-                          { value: 'unknown', label: s.customer && s.customer.name !== '散客' ? '没提·按挂账' : '没提·按已收' },
+                          { value: 'paid', label: '已收款' },
+                          { value: 'credit', label: '挂账（先欠着）' },
+                          // 落账默认：散客当场结清、记名客户挂账。AI 把口述里的"散客"匹配到内置散客档案时不算记名客户
+                          { value: 'unknown', label: s.customer && s.customer.name !== '散客' ? '默认：挂账' : '默认：已收款' },
                         ]}
-                        style={{ width: 120 }}
+                        style={{ width: 128 }}
                       />
                     ),
                   },
