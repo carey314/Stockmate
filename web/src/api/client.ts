@@ -38,7 +38,7 @@ client.interceptors.response.use(
   (res) => {
     const body = res.data
     if (body && typeof body.code === 'number' && body.code >= 400) {
-      return Promise.reject(new Error(body.message || '请求失败'))
+      return Promise.reject(Object.assign(new Error(body.message || '请求失败'), { status: body.code }))
     }
     return body?.data !== undefined ? body.data : body
   },
@@ -61,9 +61,16 @@ client.interceptors.response.use(
         return new Promise(() => {}) // 页面即将跳走，挂起后续处理
       }
     }
-    return Promise.reject(new Error(msg))
+    // status 一起带出去：页面要靠它区分 402（免费额度用完→升级引导）和 429（专业版防滥用→只弹原文）。
+    // 现有 catch 只读 .message，加字段向后兼容。
+    return Promise.reject(Object.assign(new Error(msg), { status }))
   },
 )
+
+/** api 拒绝值的形状：Error + 可选 HTTP status（402/429 分流用） */
+export interface ApiError extends Error {
+  status?: number
+}
 
 // 解包后返回值类型已是 data 本身
 export const api = {

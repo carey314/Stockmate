@@ -1,9 +1,11 @@
-import { Button, Typography } from 'antd'
+import { App, Button, Typography } from 'antd'
 import { ClearOutlined, SendOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import api from '../../api/client'
 import { T } from '../../theme'
 import { t } from '../../lib/i18n'
+import { AiQuotaTag, handleAiQuotaError } from '../../components/AiQuota'
+import { refreshEntitlement } from '../../hooks/useEntitlement'
 
 interface Msg {
   role: 'user' | 'assistant'
@@ -29,6 +31,7 @@ function loadMsgs(): Msg[] {
 }
 
 export default function AiChatPanel() {
+  const { modal } = App.useApp()
   const [msgs, setMsgs] = useState<Msg[]>(loadMsgs)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -54,8 +57,10 @@ export default function AiChatPanel() {
     setMsgs((p) => [...p, { role: 'user', content: question }, { role: 'assistant', content: '', status: 'loading' }])
     try {
       const data = await api.post<{ answer: string }>('/ai/ask', { question, history })
+      refreshEntitlement()
       setMsgs((p) => [...p.slice(0, -1), { role: 'assistant', content: data.answer }])
     } catch (e) {
+      handleAiQuotaError(e, modal, true)
       const raw = (e as Error).message
       const friendly = raw.includes('timeout')
         ? t('AI 想久了没回来，网络可能不稳', 'AI took too long to answer — the network may be unstable')
@@ -82,6 +87,7 @@ export default function AiChatPanel() {
         <Typography.Text strong style={{ fontSize: 17 }}>
           ✨ {t('AI 问生意', 'Ask AI')}
         </Typography.Text>
+        <span style={{ marginLeft: 'auto', marginRight: 6 }}><AiQuotaTag bucket="other" /></span>
         {msgs.length > 0 && (
           <Button
             size="small"

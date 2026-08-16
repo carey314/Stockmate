@@ -2,8 +2,11 @@ import { Alert, App, Button, Input, Select, Steps, Table, Tag, Typography } from
 import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
+import { useAuth } from '../auth'
 import { fmtMoney, fmtQty } from '../lib/format'
 import { t } from '../lib/i18n'
+import { AiQuotaTag, handleAiQuotaError } from '../components/AiQuota'
+import { refreshEntitlement } from '../hooks/useEntitlement'
 import { T, cardStyle } from '../theme'
 
 interface ProductType {
@@ -54,7 +57,9 @@ AI turns this into draft products; nothing is saved until you confirm. Lines it 
 )
 
 export default function ImportPage() {
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [types, setTypes] = useState<ProductType[]>([])
   const [typeId, setTypeId] = useState<number | null>(null)
   const [text, setText] = useState('')
@@ -90,10 +95,11 @@ export default function ImportPage() {
       const r = await api.post<ImportResp>('/ai/import-products', { productTypeId: typeId, text })
       setResult(r)
       setSelected(r.products.map((_, i) => String(i))) // 与 rowKey 同为字符串，防勾选态失联
+      refreshEntitlement()
       if (r.products.length === 0)
         message.warning(t('AI 没解析出任何商品，看看下面的未解析清单', 'AI found no products — check the unparsed lines below'))
     } catch (e) {
-      message.error((e as Error).message)
+      if (!handleAiQuotaError(e, modal, isAdmin)) message.error((e as Error).message)
     } finally {
       setParsing(false)
     }
@@ -206,6 +212,7 @@ export default function ImportPage() {
           <Button type="primary" icon={<ThunderboltOutlined />} loading={parsing} onClick={parse}>
             {parsing ? t('AI 解析中（10~30 秒）', 'AI parsing (10–30s)') : t('AI 解析', 'AI parse')}
           </Button>
+          <AiQuotaTag bucket="other" />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {t(
               '只出草案，你确认才入库；AI 绝不编造进价',

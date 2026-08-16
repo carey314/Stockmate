@@ -15,6 +15,7 @@ import { useAuth } from '../auth'
 import { T } from '../theme'
 import { dateFormat, t } from '../lib/i18n'
 import { useMediaQuery } from '../lib/useMediaQuery'
+import { ProBadge } from '../components/AiQuota'
 
 export default function TopBar({
   title,
@@ -106,6 +107,7 @@ export default function TopBar({
             {dayjs().format(dateFormat)}
           </div>
         )}
+        <ProBadge />
         {onOpenSearch && (
           <Button
             shape={md ? 'round' : 'circle'}

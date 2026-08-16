@@ -3,6 +3,8 @@ import { CheckCircleOutlined, QuestionCircleOutlined, ThunderboltOutlined } from
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../auth'
+import { AiQuotaTag, handleAiQuotaError } from '../components/AiQuota'
+import { refreshEntitlement } from '../hooks/useEntitlement'
 import { fmtMoney, fmtQty } from '../lib/format'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
@@ -74,7 +76,7 @@ AI only drafts entries — nothing is saved until you confirm. It never touches 
 )
 
 export default function QuickEntryPage() {
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const [text, setText] = useState('')
   const [mode, setMode] = useState('default')
   const [parsing, setParsing] = useState(false)
@@ -100,7 +102,8 @@ export default function QuickEntryPage() {
   const [buildFile, setBuildFile] = useState<Record<string, boolean>>({})
 
   // 建档要归到哪个品类：主营品类优先，没有就第一个品类；一个品类都没有则禁用建档
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [types, setTypes] = useState<{ id: number; name: string }[]>([])
   useEffect(() => {
     api
@@ -124,13 +127,14 @@ export default function QuickEntryPage() {
       setPurEdit(Object.fromEntries(r.purchases.map((p, i) => [i, { on: true, unitCost: p.unitCost }])))
       setExpOn(Object.fromEntries(r.expenses.map((_, i) => [i, true])))
       setAggOn(Object.fromEntries(r.aggregates.map((_, i) => [i, true])))
+      refreshEntitlement()
       const nItems = r.sales.length + r.purchases.length + r.expenses.length + r.aggregates.length
       if (nItems === 0)
         message.warning(
           t('AI 没解析出可入账的内容，看看下面的提示', 'AI found nothing to record — see the notes below'),
         )
     } catch (e) {
-      message.error((e as Error).message)
+      if (!handleAiQuotaError(e, modal, isAdmin)) message.error((e as Error).message)
     } finally {
       setParsing(false)
     }
@@ -182,9 +186,10 @@ export default function QuickEntryPage() {
         aggregates: aggregatesBody,
       })
       setDone(r)
+      refreshEntitlement()
       message.success(t('已入账', 'Recorded'))
     } catch (e) {
-      message.error((e as Error).message)
+      if (!handleAiQuotaError(e, modal, isAdmin)) message.error((e as Error).message)
     } finally {
       setCommitting(false)
     }
@@ -203,6 +208,7 @@ export default function QuickEntryPage() {
           <Button type="primary" icon={<ThunderboltOutlined />} loading={parsing} onClick={parse}>
             {parsing ? t('AI 解析中…', 'AI parsing…') : t('AI 解析', 'AI parse')}
           </Button>
+          <AiQuotaTag bucket="core" />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {t(
               '只出草案，确认才落库；AI 绝不编成本价，退货不碰',

@@ -16,6 +16,8 @@ import { useCallback, useEffect, useState } from 'react'
 import api from '../api/client'
 import { useAuth } from '../auth'
 import { t } from '../lib/i18n'
+import { AiQuotaTag, handleAiQuotaError } from '../components/AiQuota'
+import { refreshEntitlement } from '../hooks/useEntitlement'
 import { T, cardStyle } from '../theme'
 
 // ===== 类型 =====
@@ -155,7 +157,7 @@ function FieldEditor({
 
 export default function TypesPage() {
   const { user, profile, refreshProfile } = useAuth()
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const isAdmin = user?.role === 'admin'
 
   const [types, setTypes] = useState<ProductType[] | null>(null)
@@ -213,8 +215,9 @@ export default function TypesPage() {
       ]
       setDrafts(mapped)
       message.success(t(`AI 配了 ${mapped.length} 个字段，可以再改`, `AI set up ${mapped.length} fields — edit them as you like`))
+      refreshEntitlement()
     } catch (e) {
-      message.error((e as Error).message)
+      if (!handleAiQuotaError(e, modal, isAdmin)) message.error((e as Error).message)
     } finally {
       setAiBusy(false)
     }
@@ -398,6 +401,7 @@ export default function TypesPage() {
           <Button icon={<ThunderboltOutlined />} loading={aiBusy} onClick={aiFill}>
             {t('✨ AI 配字段', '✨ AI fields')}
           </Button>
+          <AiQuotaTag bucket="other" />
         </div>
         <Input.TextArea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t('备注（选填）', 'Notes (optional)')} autoSize={{ minRows: 1, maxRows: 2 }} style={{ marginBottom: 16 }} maxLength={100} />
         <FieldEditor fields={drafts} onChange={setDrafts} />
