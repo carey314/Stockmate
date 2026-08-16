@@ -20,6 +20,7 @@ import { useAuth } from '../auth'
 import { EditNum, EditText } from '../components/EditableCells'
 import ImageUpload from '../components/ImageUpload'
 import { fmtMoney, fmtQty } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 // ===== 类型（形状对齐 docs/web-design-spec.md 与 products 控制器）=====
@@ -87,14 +88,14 @@ function DynField({ f, ns = 'customFields' }: { f: FieldDef; ns?: string }) {
       key={f.key}
       name={[ns, f.key]}
       label={f.label + (f.unit ? `（${f.unit}）` : '')}
-      rules={f.required === 1 ? [{ required: true, message: `${f.label}为必填` }] : undefined}
+      rules={f.required === 1 ? [{ required: true, message: t(`${f.label}为必填`, `${f.label} is required`) }] : undefined}
     >
       {opts.length > 0 ? (
-        <Select options={opts.map((o) => ({ value: o, label: o }))} allowClear placeholder="请选择" />
+        <Select options={opts.map((o) => ({ value: o, label: o }))} allowClear placeholder={t('请选择', 'Select')} />
       ) : f.type === 'number' ? (
-        <InputNumber style={{ width: '100%' }} placeholder="请输入" />
+        <InputNumber style={{ width: '100%' }} placeholder={t('请输入', 'Enter a value')} />
       ) : (
-        <Input placeholder="请输入" />
+        <Input placeholder={t('请输入', 'Enter a value')} />
       )}
     </Form.Item>
   )
@@ -221,8 +222,13 @@ export default function ProductsPage() {
       const results = await Promise.allSettled(selectedKeys.map((id) => api.delete(`/products/${id}`)))
       const okN = results.filter((r) => r.status === 'fulfilled').length
       const failN = results.length - okN
-      if (failN === 0) message.success(`已删除 ${okN} 个商品`)
-      else message.warning(`删除 ${okN} 个成功，${failN} 个失败（${(results.find((r) => r.status === 'rejected') as PromiseRejectedResult)?.reason?.message ?? ''}）`)
+      if (failN === 0) message.success(t(`已删除 ${okN} 个商品`, `Deleted ${okN} products`))
+      else {
+        const firstErr = (results.find((r) => r.status === 'rejected') as PromiseRejectedResult)?.reason?.message ?? ''
+        message.warning(
+          t(`删除 ${okN} 个成功，${failN} 个失败（${firstErr}）`, `${okN} deleted, ${failN} failed (${firstErr})`),
+        )
+      }
       setSelectedKeys([])
       load()
     } finally {
@@ -251,8 +257,8 @@ export default function ProductsPage() {
     setBatchBusy(false)
     setBatchOpen(false)
     setSelectedKeys([])
-    if (bad) message.warning(`改价完成：成功 ${ok} 个规格，失败 ${bad} 个`)
-    else message.success(`已批量改价 ${ok} 个规格`)
+    if (bad) message.warning(t(`改价完成：成功 ${ok} 个规格，失败 ${bad} 个`, `Repricing done: ${ok} variants updated, ${bad} failed`))
+    else message.success(t(`已批量改价 ${ok} 个规格`, `Repriced ${ok} variants`))
   }
 
   // ===== 新建商品 =====
@@ -313,7 +319,7 @@ export default function ProductsPage() {
           })
         }
       }
-      message.success(`已创建「${v.name}」`)
+      message.success(t(`已创建「${v.name}」`, `Created "${v.name}"`))
       setCreateOpen(false)
       createForm.resetFields()
       load()
@@ -351,7 +357,7 @@ export default function ProductsPage() {
         initQuantity: v.initQuantity ?? 0,
         minQuantity: v.minQuantity ?? 0,
       })
-      message.success('规格已添加')
+      message.success(t('规格已添加', 'Variant added'))
       setSkuTarget(null)
       skuForm.resetFields()
       load()
@@ -388,7 +394,7 @@ export default function ProductsPage() {
           Object.entries((v.customFields ?? {}) as Record<string, unknown>).filter(([, val]) => val !== undefined && val !== null && val !== ''),
         ),
       })
-      message.success('已保存')
+      message.success(t('已保存', 'Saved'))
       setEditProduct(null)
       load()
     } catch (e) {
@@ -402,7 +408,7 @@ export default function ProductsPage() {
   const removeProduct = async (p: ProductRow) => {
     try {
       await api.delete(`/products/${p.id}`)
-      message.success(`已删除「${p.name}」`)
+      message.success(t(`已删除「${p.name}」`, `Deleted "${p.name}"`))
       load()
     } catch (e) {
       message.error((e as Error).message)
@@ -411,7 +417,7 @@ export default function ProductsPage() {
   const removeSku = async (s: SkuRow) => {
     try {
       await api.delete(`/skus/${s.id}`)
-      message.success('规格已停用')
+      message.success(t('规格已停用', 'Variant disabled'))
       load()
     } catch (e) {
       message.error((e as Error).message)
@@ -421,7 +427,7 @@ export default function ProductsPage() {
   // ===== 表格列 =====
   const columns: ColumnsType<ProductRow> = [
     {
-      title: '商品',
+      title: t('商品', 'Product'),
       key: 'name',
       render: (_, p) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -457,7 +463,7 @@ export default function ProductsPage() {
       ),
     },
     {
-      title: '品类',
+      title: t('品类', 'Category'),
       dataIndex: ['productType', 'name'],
       width: 92,
       render: (v: string) => (
@@ -476,7 +482,7 @@ export default function ProductsPage() {
       ),
     },
     {
-      title: '价格',
+      title: t('价格', 'Price'),
       key: 'price',
       width: 130,
       render: (_, p) => {
@@ -487,7 +493,7 @@ export default function ProductsPage() {
       },
     },
     {
-      title: '规格',
+      title: t('规格', 'Variants'),
       key: 'skuCount',
       width: 56,
       align: 'center',
@@ -495,7 +501,7 @@ export default function ProductsPage() {
       render: (_, p) => p.skus.length,
     },
     {
-      title: '库存合计',
+      title: t('库存合计', 'Total stock'),
       key: 'stock',
       width: 100,
       render: (_, p) => {
@@ -510,20 +516,29 @@ export default function ProductsPage() {
       },
     },
     {
-      title: '操作',
+      title: t('操作', 'Actions'),
       key: 'ops',
       width: 132,
       fixed: 'right',
       render: (_, p) => (
         <span style={{ display: 'flex', gap: 2 }}>
-          <Button size="small" type="text" icon={<EditOutlined />} title="编辑商品" onClick={() => openEditProduct(p)} />
+          <Button
+            size="small"
+            type="text"
+            icon={<EditOutlined />}
+            title={t('编辑商品', 'Edit product')}
+            onClick={() => openEditProduct(p)}
+          />
           <Button size="small" type="text" style={{ color: T.primary }} onClick={() => setSkuTarget(p)}>
-            +规格
+            {t('+规格', '+Variant')}
           </Button>
           {isAdmin && (
             <Popconfirm
-              title={`删除「${p.name}」？`}
-              description="商品会被移入回收（软删），单据历史不受影响"
+              title={t(`删除「${p.name}」？`, `Delete "${p.name}"?`)}
+              description={t(
+                '商品会被移入回收（软删），单据历史不受影响',
+                'The product is archived (soft delete). Existing documents are unaffected.',
+              )}
               onConfirm={() => removeProduct(p)}
             >
               <Button size="small" type="text" danger icon={<DeleteOutlined />} />
@@ -547,12 +562,12 @@ export default function ProductsPage() {
           padding: '6px 0',
         }}
       >
-        <span>规格</span>
-        <span>售价</span>
-        <span>成本价</span>
-        <span>条码</span>
-        <span>库存（留流水）</span>
-        <span>预警线</span>
+        <span>{t('规格', 'Variant')}</span>
+        <span>{t('售价', 'Price')}</span>
+        <span>{t('成本价', 'Cost')}</span>
+        <span>{t('条码', 'Barcode')}</span>
+        <span>{t('库存（留流水）', 'Stock (logged)')}</span>
+        <span>{t('预警线', 'Low-stock alert')}</span>
         <span />
       </div>
       {p.skus.map((s) => {
@@ -571,8 +586,10 @@ export default function ProductsPage() {
             }}
           >
             <span style={{ fontSize: 13 }}>
-              {s.specText || <span style={{ color: T.secondary }}>默认规格</span>}
-              {lowNow && <span style={{ color: T.error, fontSize: 11, marginLeft: 6 }}>低库存</span>}
+              {s.specText || <span style={{ color: T.secondary }}>{t('默认规格', 'Default variant')}</span>}
+              {lowNow && (
+                <span style={{ color: T.error, fontSize: 11, marginLeft: 6 }}>{t('低库存', 'Low stock')}</span>
+              )}
             </span>
             <EditNum
               value={s.price}
@@ -582,12 +599,12 @@ export default function ProductsPage() {
             <EditNum
               value={s.costPrice}
               prefix="¥"
-              placeholder="未填"
+              placeholder={t('未填', 'Not set')}
               onSave={(v) => saveSku(s.id, { costPrice: v }, { costPrice: v })}
             />
             <EditText
               value={s.barcode}
-              placeholder="扫码枪对准输入"
+              placeholder={t('扫码枪对准输入', 'Scan or type barcode')}
               onSave={(v) => saveSku(s.id, { barcode: v }, { barcode: v })}
             />
             <EditNum
@@ -605,7 +622,11 @@ export default function ProductsPage() {
               }}
             />
             {isAdmin && p.skus.length > 1 ? (
-              <Popconfirm title="删除该规格？" description="有库存会被拒绝" onConfirm={() => removeSku(s)}>
+              <Popconfirm
+                title={t('删除该规格？', 'Delete this variant?')}
+                description={t('有库存会被拒绝', 'Rejected if it still has stock')}
+                onConfirm={() => removeSku(s)}
+              >
                 <Button size="small" type="text" danger icon={<DeleteOutlined />} />
               </Popconfirm>
             ) : (
@@ -624,10 +645,10 @@ export default function ProductsPage() {
       dataSource={alerts}
       pagination={false}
       size="middle"
-      locale={{ emptyText: '没有低于预警线的规格 👍' }}
+      locale={{ emptyText: t('没有低于预警线的规格 👍', 'Nothing below its low-stock alert 👍') }}
       columns={[
         {
-          title: '商品 / 规格',
+          title: t('商品 / 规格', 'Product / Variant'),
           render: (_, a) => (
             <span>
               {a.sku.product.name}
@@ -636,7 +657,7 @@ export default function ProductsPage() {
           ),
         },
         {
-          title: '当前库存',
+          title: t('当前库存', 'Current stock'),
           width: 160,
           render: (_, a) => (
             <EditNum
@@ -656,7 +677,7 @@ export default function ProductsPage() {
           ),
         },
         {
-          title: '预警线',
+          title: t('预警线', 'Low-stock alert'),
           width: 140,
           render: (_, a) => `${fmtQty(a.minQuantity)} ${a.sku.product.unit}`,
         },
@@ -665,9 +686,12 @@ export default function ProductsPage() {
   )
 
   const tabs: { key: number | 'all' | 'lowstock'; label: string }[] = [
-    { key: 'all', label: '全部' },
-    ...types.map((t) => ({ key: t.id, label: t.name })),
-    { key: 'lowstock' as const, label: `低库存${alerts.length ? ` ${alerts.length}` : ''}` },
+    { key: 'all', label: t('全部', 'All') },
+    ...types.map((ty) => ({ key: ty.id, label: ty.name })),
+    {
+      key: 'lowstock' as const,
+      label: t(`低库存${alerts.length ? ` ${alerts.length}` : ''}`, `Low stock${alerts.length ? ` ${alerts.length}` : ''}`),
+    },
   ]
 
   return (
@@ -706,7 +730,7 @@ export default function ProductsPage() {
         <Input
           allowClear
           prefix={<SearchOutlined style={{ color: T.secondary }} />}
-          placeholder="搜名称 / 编码 / 条码 / 规格"
+          placeholder={t('搜名称 / 编码 / 条码 / 规格', 'Search name / code / barcode / variant')}
           style={{ width: 240, borderRadius: 999 }}
           onChange={(e) => {
             const v = e.target.value.trim()
@@ -719,7 +743,7 @@ export default function ProductsPage() {
           }}
         />
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          新增商品
+          {t('新增商品', 'New product')}
         </Button>
       </div>
 
@@ -735,25 +759,33 @@ export default function ProductsPage() {
             borderColor: `${T.primary}44`,
           }}
         >
-          <Typography.Text strong>已选 {selectedKeys.length} 个商品（{selectedSkuCount} 个规格）</Typography.Text>
+          <Typography.Text strong>
+            {t(
+              `已选 ${selectedKeys.length} 个商品（${selectedSkuCount} 个规格）`,
+              `${selectedKeys.length} products selected (${selectedSkuCount} variants)`,
+            )}
+          </Typography.Text>
           <Button type="primary" size="small" onClick={() => setBatchOpen(true)}>
-            批量改价
+            {t('批量改价', 'Bulk reprice')}
           </Button>
           {isAdmin && (
             <Popconfirm
-              title={`删除选中的 ${selectedKeys.length} 个商品？`}
-              description="软删除：历史单据和报表保留原名，删后不可再开单卖它"
-              okText="删除"
+              title={t(`删除选中的 ${selectedKeys.length} 个商品？`, `Delete the ${selectedKeys.length} selected products?`)}
+              description={t(
+                '软删除：历史单据和报表保留原名，删后不可再开单卖它',
+                'Soft delete: past documents and reports keep the original name, but you can no longer sell it.',
+              )}
+              okText={t('删除', 'Delete')}
               okButtonProps={{ danger: true }}
               onConfirm={batchDelete}
             >
               <Button size="small" danger loading={batchDeleting}>
-                批量删除
+                {t('批量删除', 'Bulk delete')}
               </Button>
             </Popconfirm>
           )}
           <Button size="small" onClick={() => setSelectedKeys([])}>
-            取消选择
+            {t('取消选择', 'Clear selection')}
           </Button>
         </div>
       )}
@@ -775,7 +807,7 @@ export default function ProductsPage() {
               pageSize,
               total,
               showSizeChanger: true,
-              showTotal: (t) => `共 ${t} 个商品`,
+              showTotal: (n) => t(`共 ${n} 个商品`, `${n} products`),
               onChange: (p, ps) => {
                 setPage(p)
                 setPageSize(ps)
@@ -788,75 +820,103 @@ export default function ProductsPage() {
 
       {/* 批量改价 */}
       <Modal
-        title={`批量改价（${selectedKeys.length} 个商品 / ${selectedSkuCount} 个规格）`}
+        title={t(
+          `批量改价（${selectedKeys.length} 个商品 / ${selectedSkuCount} 个规格）`,
+          `Bulk reprice (${selectedKeys.length} products / ${selectedSkuCount} variants)`,
+        )}
         open={batchOpen}
         onCancel={() => setBatchOpen(false)}
         onOk={runBatch}
         confirmLoading={batchBusy}
-        okText="执行改价"
+        okText={t('执行改价', 'Apply')}
       >
         <Form form={batchForm} layout="vertical" initialValues={{ mode: 'percent' }}>
-          <Form.Item name="mode" label="方式">
+          <Form.Item name="mode" label={t('方式', 'Method')}>
             <Radio.Group
               options={[
-                { value: 'percent', label: '按百分比（如 +5 = 涨价 5%，-10 = 降价 10%）' },
-                { value: 'amount', label: '按金额（如 +2 = 每个规格加 2 元）' },
+                {
+                  value: 'percent',
+                  label: t('按百分比（如 +5 = 涨价 5%，-10 = 降价 10%）', 'By percentage (+5 = raise 5%, -10 = cut 10%)'),
+                },
+                {
+                  value: 'amount',
+                  label: t('按金额（如 +2 = 每个规格加 2 元）', 'By amount (+2 = add ¥2 to every variant)'),
+                },
               ]}
             />
           </Form.Item>
-          <Form.Item name="value" label="调整值" rules={[{ required: true, message: '填一个数，可以是负数' }]}>
-            <InputNumber style={{ width: 200 }} precision={2} placeholder="正数涨、负数降" />
+          <Form.Item
+            name="value"
+            label={t('调整值', 'Adjustment')}
+            rules={[{ required: true, message: t('填一个数，可以是负数', 'Enter a number — negatives allowed') }]}
+          >
+            <InputNumber style={{ width: 200 }} precision={2} placeholder={t('正数涨、负数降', 'Positive up, negative down')} />
           </Form.Item>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            改的是每个规格的售价，四舍五入到分，最低 0 元。成本价不动。
+            {t(
+              '改的是每个规格的售价，四舍五入到分，最低 0 元。成本价不动。',
+              'Changes each variant’s selling price, rounded to the cent, never below 0. Cost is left alone.',
+            )}
           </Typography.Text>
         </Form>
       </Modal>
 
       {/* 新建商品 */}
       <Modal
-        title="新增商品"
+        title={t('新增商品', 'New product')}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={runCreate}
         confirmLoading={createBusy}
-        okText="创建"
+        okText={t('创建', 'Create')}
         width={520}
       >
         <Form form={createForm} layout="vertical" initialValues={{ unit: '件' }}>
-          <Form.Item name="productTypeId" label="品类" rules={[{ required: true, message: '选择品类' }]}>
+          <Form.Item
+            name="productTypeId"
+            label={t('品类', 'Category')}
+            rules={[{ required: true, message: t('选择品类', 'Pick a category') }]}
+          >
             <Select
-              options={types.map((t) => ({ value: t.id, label: t.name }))}
-              placeholder="商品属于哪个品类"
+              options={types.map((ty) => ({ value: ty.id, label: ty.name }))}
+              placeholder={t('商品属于哪个品类', 'Which category does it belong to?')}
             />
           </Form.Item>
-          <Form.Item name="name" label="商品名称" rules={[{ required: true, message: '填商品名' }]}>
-            <Input placeholder="如：泸州老窖 52度" />
+          <Form.Item
+            name="name"
+            label={t('商品名称', 'Product name')}
+            rules={[{ required: true, message: t('填商品名', 'Enter a product name') }]}
+          >
+            <Input placeholder={t('如：泸州老窖 52度', 'e.g. Luzhou Laojiao 52%')} />
           </Form.Item>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Form.Item name="defaultPrice" label="售价" rules={[{ required: true, message: '填售价' }]}>
+            <Form.Item
+              name="defaultPrice"
+              label={t('售价', 'Price')}
+              rules={[{ required: true, message: t('填售价', 'Enter a price') }]}
+            >
               <InputNumber style={{ width: '100%' }} prefix="¥" min={0} precision={2} />
             </Form.Item>
-            <Form.Item name="costPrice" label="成本价（选填，算毛利用）">
+            <Form.Item name="costPrice" label={t('成本价（选填，算毛利用）', 'Cost (optional, used for margin)')}>
               <InputNumber style={{ width: '100%' }} prefix="¥" min={0} precision={2} />
             </Form.Item>
-            <Form.Item name="unit" label="单位">
-              <Input placeholder="件 / 瓶 / 斤" />
+            <Form.Item name="unit" label={t('单位', 'Unit')}>
+              <Input placeholder={t('件 / 瓶 / 斤', 'pc / bottle / kg')} />
             </Form.Item>
-            <Form.Item name="barcode" label="条码（选填）">
-              <Input placeholder="扫码枪对准输入" />
+            <Form.Item name="barcode" label={t('条码（选填）', 'Barcode (optional)')}>
+              <Input placeholder={t('扫码枪对准输入', 'Scan or type barcode')} />
             </Form.Item>
-            <Form.Item name="initQuantity" label="初始库存（选填）">
+            <Form.Item name="initQuantity" label={t('初始库存（选填）', 'Opening stock (optional)')}>
               <InputNumber style={{ width: '100%' }} min={0} />
             </Form.Item>
-            <Form.Item name="minQuantity" label="库存预警线（选填）">
+            <Form.Item name="minQuantity" label={t('库存预警线（选填）', 'Low-stock alert (optional)')}>
               <InputNumber style={{ width: '100%' }} min={0} precision={0} />
             </Form.Item>
           </div>
           {productFields.length > 0 && (
             <>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                「{createType?.name}」的品类字段：
+                {t(`「${createType?.name}」的品类字段：`, `Category fields for "${createType?.name}":`)}
               </Typography.Text>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
                 {productFields.map((f) => (
@@ -868,7 +928,10 @@ export default function ProductsPage() {
           {createSkuFields.length > 0 && (
             <>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                首个规格（该品类按{createSkuFields.map((f) => f.label).join('/')}区分规格，之后可再加）：
+                {t(
+                  `首个规格（该品类按${createSkuFields.map((f) => f.label).join('/')}区分规格，之后可再加）：`,
+                  `First variant (this category splits variants by ${createSkuFields.map((f) => f.label).join('/')}; you can add more later):`,
+                )}
               </Typography.Text>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
                 {createSkuFields.map((f) => (
@@ -882,12 +945,12 @@ export default function ProductsPage() {
 
       {/* 新增规格 */}
       <Modal
-        title={skuTarget ? `为「${skuTarget.name}」新增规格` : ''}
+        title={skuTarget ? t(`为「${skuTarget.name}」新增规格`, `Add a variant to "${skuTarget.name}"`) : ''}
         open={!!skuTarget}
         onCancel={() => setSkuTarget(null)}
         onOk={runAddSku}
         confirmLoading={skuBusy}
-        okText="添加"
+        okText={t('添加', 'Add')}
         width={480}
       >
         <Form form={skuForm} layout="vertical">
@@ -899,23 +962,30 @@ export default function ProductsPage() {
             </div>
           ) : (
             <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-              该品类没有规格维度字段，同一商品只能有一个默认规格；如需多规格，先去品类里加规格维度。
+              {t(
+                '该品类没有规格维度字段，同一商品只能有一个默认规格；如需多规格，先去品类里加规格维度。',
+                'This category has no variant dimensions, so each product has a single default variant. To use multiple variants, add a variant dimension to the category first.',
+              )}
             </Typography.Paragraph>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Form.Item name="price" label="售价" rules={[{ required: true, message: '填售价' }]}>
+            <Form.Item
+              name="price"
+              label={t('售价', 'Price')}
+              rules={[{ required: true, message: t('填售价', 'Enter a price') }]}
+            >
               <InputNumber style={{ width: '100%' }} prefix="¥" min={0} precision={2} />
             </Form.Item>
-            <Form.Item name="costPrice" label="成本价（选填）">
+            <Form.Item name="costPrice" label={t('成本价（选填）', 'Cost (optional)')}>
               <InputNumber style={{ width: '100%' }} prefix="¥" min={0} precision={2} />
             </Form.Item>
-            <Form.Item name="barcode" label="条码（选填）">
+            <Form.Item name="barcode" label={t('条码（选填）', 'Barcode (optional)')}>
               <Input />
             </Form.Item>
-            <Form.Item name="initQuantity" label="初始库存">
+            <Form.Item name="initQuantity" label={t('初始库存', 'Opening stock')}>
               <InputNumber style={{ width: '100%' }} min={0} />
             </Form.Item>
-            <Form.Item name="minQuantity" label="预警线">
+            <Form.Item name="minQuantity" label={t('预警线', 'Low-stock alert')}>
               <InputNumber style={{ width: '100%' }} min={0} precision={0} />
             </Form.Item>
           </div>
@@ -924,33 +994,40 @@ export default function ProductsPage() {
 
       {/* 编辑商品 SPU */}
       <Modal
-        title={editProduct ? `编辑「${editProduct.name}」` : ''}
+        title={editProduct ? t(`编辑「${editProduct.name}」`, `Edit "${editProduct.name}"`) : ''}
         open={!!editProduct}
         onCancel={() => setEditProduct(null)}
         onOk={runEditProduct}
         confirmLoading={editBusy}
-        okText="保存"
+        okText={t('保存', 'Save')}
         width={520}
       >
         <Form form={editForm} layout="vertical">
-          <Form.Item name="name" label="商品名称" rules={[{ required: true, message: '填商品名' }]}>
+          <Form.Item
+            name="name"
+            label={t('商品名称', 'Product name')}
+            rules={[{ required: true, message: t('填商品名', 'Enter a product name') }]}
+          >
             <Input maxLength={40} />
           </Form.Item>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Form.Item name="unit" label="单位">
-              <Input placeholder="件 / 瓶 / 斤" />
+            <Form.Item name="unit" label={t('单位', 'Unit')}>
+              <Input placeholder={t('件 / 瓶 / 斤', 'pc / bottle / kg')} />
             </Form.Item>
-            <Form.Item name="barcode" label="条码">
-              <Input placeholder="扫码枪对准输入" />
+            <Form.Item name="barcode" label={t('条码', 'Barcode')}>
+              <Input placeholder={t('扫码枪对准输入', 'Scan or type barcode')} />
             </Form.Item>
           </div>
-          <Form.Item name="imageUrl" label="商品图">
+          <Form.Item name="imageUrl" label={t('商品图', 'Product image')}>
             <ImageUpload />
           </Form.Item>
           {editProductFields.length > 0 && (
             <>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                「{editProduct?.productType.name}」的品类字段：
+                {t(
+                  `「${editProduct?.productType.name}」的品类字段：`,
+                  `Category fields for "${editProduct?.productType.name}":`,
+                )}
               </Typography.Text>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
                 {editProductFields.map((f) => (
@@ -960,7 +1037,10 @@ export default function ProductsPage() {
             </>
           )}
           <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-            价格、成本、库存在下面规格行里改；品类不可改（换品类请新建商品）。
+            {t(
+              '价格、成本、库存在下面规格行里改；品类不可改（换品类请新建商品）。',
+              'Price, cost and stock are edited on the variant rows below. Category cannot be changed — create a new product instead.',
+            )}
           </Typography.Text>
         </Form>
       </Modal>

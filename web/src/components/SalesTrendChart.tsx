@@ -3,6 +3,11 @@ import { useEffect, useRef } from 'react'
 import echarts, { graphic } from '../lib/echarts'
 import type { ECharts } from 'echarts/core'
 import { T, cardStyle, primaryRgba } from '../theme'
+import { t } from '../lib/i18n'
+
+// 图例名同时用于 tooltip 里判断要不要加 ¥，两处必须同一常量
+const S_SALES = t('销售额', 'Sales')
+const S_ORDERS = t('订单数', 'Orders')
 
 export interface SalesPoint {
   date: string // 服务端 UTC 日字符串，直接展示不做时区换算
@@ -78,7 +83,7 @@ export default function SalesTrendChart({
                 `<div style="display:flex;justify-content:space-between;gap:18px;align-items:center;font-size:13px;margin-top:4px">
                    <span style="display:flex;align-items:center;gap:6px">
                      <span style="width:4px;height:12px;border-radius:99px;background:${p.color}"></span>${p.seriesName}
-                   </span><b>${p.seriesName === '销售额' ? '¥' + p.value : p.value}</b></div>`,
+                   </span><b>${p.seriesName === S_SALES ? '¥' + p.value : p.value}</b></div>`,
             )
             .join('')
           return `<div style="opacity:.8;font-size:12px">${ps[0]?.axisValue ?? ''}</div>${rows}`
@@ -86,7 +91,7 @@ export default function SalesTrendChart({
       },
       series: [
         {
-          name: '销售额',
+          name: S_SALES,
           type: 'line',
           data: data.map((d) => d.sales),
           smooth: 0.4,
@@ -102,7 +107,7 @@ export default function SalesTrendChart({
           },
         },
         {
-          name: '订单数',
+          name: S_ORDERS,
           type: 'line',
           yAxisIndex: 1,
           data: data.map((d) => d.orders),
@@ -120,10 +125,10 @@ export default function SalesTrendChart({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div>
           <Typography.Text strong style={{ fontSize: 17 }}>
-            销售趋势
+            {t('销售趋势', 'Sales Trend')}
           </Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 10 }}>
-            紫线=销售额 · 灰线=订单数
+            {t('紫线=销售额 · 灰线=订单数', 'Purple = sales · Grey = orders')}
           </Typography.Text>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -143,7 +148,7 @@ export default function SalesTrendChart({
                 border: range === r ? `1px solid ${T.primary}33` : '1px solid transparent',
               }}
             >
-              {r} 天
+              {t(`${r} 天`, `${r}d`)}
             </span>
           ))}
         </div>
@@ -174,7 +179,10 @@ export default function SalesTrendChart({
               justifyContent: 'center',
             }}
           >
-            <Empty description="这段时间还没有销售记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty
+              description={t('这段时间还没有销售记录', 'No sales recorded in this period')}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
           </div>
         )}
       </div>

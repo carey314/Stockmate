@@ -20,6 +20,7 @@ import { useSearchParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import api from '../api/client'
 import { fmtMoney, fmtQty } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 type Mode = 'customer' | 'supplier'
@@ -145,7 +146,7 @@ export default function PartnersPage() {
     try {
       if (editing) await api.put(`${base}/${editing.id}`, body)
       else await api.post(base, body)
-      message.success(editing ? '已保存' : '已新建')
+      message.success(editing ? t('已保存', 'Saved') : t('已新建', 'Created'))
       setEditOpen(false)
       load()
     } catch (e) {
@@ -158,7 +159,7 @@ export default function PartnersPage() {
   const remove = async (p: Partner) => {
     try {
       await api.delete(`${isCustomer ? '/customers' : '/suppliers'}/${p.id}`)
-      message.success(`已删除「${p.name}」`)
+      message.success(t(`已删除「${p.name}」`, `Deleted "${p.name}"`))
       load()
     } catch (e) {
       message.error((e as Error).message)
@@ -204,12 +205,12 @@ export default function PartnersPage() {
   }
   const submitPrice = async () => {
     if (!priceTarget) return
-    if (!priceSkuId) return message.warning('先选商品')
-    if (priceValue == null || priceValue < 0) return message.warning('填专属价')
+    if (!priceSkuId) return message.warning(t('先选商品', 'Pick a product first'))
+    if (priceValue == null || priceValue < 0) return message.warning(t('填专属价', 'Enter a special price'))
     setPriceBusy(true)
     try {
       await api.post('/pricing', { skuId: priceSkuId, customerId: priceTarget.id, price: priceValue })
-      message.success('已设专属价')
+      message.success(t('已设专属价', 'Special price set'))
       loadExpand(priceTarget.id, true)
       setPriceTarget(null)
     } catch (e) {
@@ -221,7 +222,7 @@ export default function PartnersPage() {
   const delPrice = async (customerId: number, ruleId: number) => {
     try {
       await api.delete(`/pricing/${ruleId}`)
-      message.success('已删除专属价')
+      message.success(t('已删除专属价', 'Special price removed'))
       loadExpand(customerId, true)
     } catch (e) {
       message.error((e as Error).message)
@@ -230,19 +231,23 @@ export default function PartnersPage() {
 
   const columns: ColumnsType<Partner> = [
     {
-      title: '名称',
+      title: t('名称', 'Name'),
       dataIndex: 'name',
       render: (v, p) => (
         <div>
           <div style={{ fontWeight: 600 }}>{v}</div>
-          {p.contactPerson && <div style={{ fontSize: 12, color: T.secondary }}>联系人 {p.contactPerson}</div>}
+          {p.contactPerson && (
+            <div style={{ fontSize: 12, color: T.secondary }}>
+              {t(`联系人 ${p.contactPerson}`, `Contact ${p.contactPerson}`)}
+            </div>
+          )}
         </div>
       ),
     },
-    { title: '电话', dataIndex: 'phone', width: 140, render: (v) => v || <span style={{ color: T.secondary }}>-</span> },
-    { title: '地址', dataIndex: 'address', ellipsis: true, render: (v) => v || <span style={{ color: T.secondary }}>-</span> },
+    { title: t('电话', 'Phone'), dataIndex: 'phone', width: 140, render: (v) => v || <span style={{ color: T.secondary }}>-</span> },
+    { title: t('地址', 'Address'), dataIndex: 'address', ellipsis: true, render: (v) => v || <span style={{ color: T.secondary }}>-</span> },
     {
-      title: isCustomer ? '欠款' : '欠供应商',
+      title: isCustomer ? t('欠款', 'Owed') : t('欠供应商', 'Owed to supplier'),
       key: 'owed',
       width: 150,
       render: (_, p) =>
@@ -250,23 +255,27 @@ export default function PartnersPage() {
           <span>
             <b style={{ color: T.error }}>{fmtMoney(p.owed!)}</b>
             <Tag color="red" style={{ marginLeft: 6, borderRadius: 999 }}>
-              {p.unpaidCount} 单
+              {t(`${p.unpaidCount} 单`, `${p.unpaidCount} docs`)}
             </Tag>
           </span>
         ) : (
-          <span style={{ color: T.emerald }}>已结清</span>
+          <span style={{ color: T.emerald }}>{t('已结清', 'Settled')}</span>
         ),
     },
-    { title: '备注', dataIndex: 'notes', width: 140, ellipsis: true, render: (v) => v || <span style={{ color: T.secondary }}>-</span> },
+    { title: t('备注', 'Notes'), dataIndex: 'notes', width: 140, ellipsis: true, render: (v) => v || <span style={{ color: T.secondary }}>-</span> },
     {
-      title: '操作',
+      title: t('操作', 'Actions'),
       key: 'ops',
       width: 120,
       fixed: 'right',
       render: (_, p) => (
         <span style={{ display: 'flex', gap: 2 }}>
           <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEdit(p)} />
-          <Popconfirm title={`删除「${p.name}」？`} description="删除后历史单据不受影响" onConfirm={() => remove(p)}>
+          <Popconfirm
+            title={t(`删除「${p.name}」？`, `Delete "${p.name}"?`)}
+            description={t('删除后历史单据不受影响', 'Past documents are unaffected')}
+            onConfirm={() => remove(p)}
+          >
             <Button size="small" type="text" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </span>
@@ -282,12 +291,13 @@ export default function PartnersPage() {
         {c.unpaid.length > 0 && (
           <div style={{ minWidth: 240 }}>
             <Typography.Text strong style={{ fontSize: 13, color: T.error }}>
-              未清单据（{c.unpaid.length}）
+              {t(`未清单据（${c.unpaid.length}）`, `Open documents (${c.unpaid.length})`)}
             </Typography.Text>
             <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12.5 }}>
               {c.unpaid.map((o) => (
                 <li key={o.id}>
-                  <span style={{ fontFamily: 'monospace' }}>{o.orderNo}</span> 应收 {fmtMoney(o.actualAmount)}·欠{' '}
+                  <span style={{ fontFamily: 'monospace' }}>{o.orderNo}</span>{' '}
+                  {t(`应收 ${fmtMoney(o.actualAmount)}·欠 `, `due ${fmtMoney(o.actualAmount)} · outstanding `)}
                   <b style={{ color: T.error }}>{fmtMoney(o.unpaidAmount)}</b>
                 </li>
               ))}
@@ -296,16 +306,22 @@ export default function PartnersPage() {
         )}
         <div style={{ minWidth: 260 }}>
           <Typography.Text strong style={{ fontSize: 13 }}>
-            近 90 天常买
+            {t('近 90 天常买', 'Frequently bought (last 90 days)')}
           </Typography.Text>
           {c.frequent.length === 0 ? (
-            <div style={{ color: T.secondary, fontSize: 12, marginTop: 4 }}>暂无成交记录</div>
+            <div style={{ color: T.secondary, fontSize: 12, marginTop: 4 }}>
+              {t('暂无成交记录', 'No sales yet')}
+            </div>
           ) : (
             <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12.5 }}>
               {c.frequent.map((f) => (
                 <li key={f.skuId}>
                   {f.productName}
-                  {f.specText ? `（${f.specText}）` : ''} · 共 {fmtQty(f.totalQty)} · 上次 {fmtMoney(f.lastPrice)}
+                  {f.specText ? `（${f.specText}）` : ''}
+                  {t(
+                    ` · 共 ${fmtQty(f.totalQty)} · 上次 ${fmtMoney(f.lastPrice)}`,
+                    ` · ${fmtQty(f.totalQty)} total · last ${fmtMoney(f.lastPrice)}`,
+                  )}
                 </li>
               ))}
             </ul>
@@ -314,23 +330,29 @@ export default function PartnersPage() {
         <div style={{ minWidth: 240 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Typography.Text strong style={{ fontSize: 13 }}>
-              专属价
+              {t('专属价', 'Special price')}
             </Typography.Text>
             <Button size="small" type="link" style={{ padding: 0, height: 'auto' }} onClick={() => openSetPrice(p)}>
-              + 设专属价
+              {t('+ 设专属价', '+ Set special price')}
             </Button>
           </div>
           {c.prices.length === 0 ? (
-            <div style={{ color: T.secondary, fontSize: 12, marginTop: 4 }}>未设专属价（这个客户单独的价格）</div>
+            <div style={{ color: T.secondary, fontSize: 12, marginTop: 4 }}>
+              {t('未设专属价（这个客户单独的价格）', 'No special price set (a price just for this customer)')}
+            </div>
           ) : (
             <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
               {c.prices.map((r) => (
                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
                   <span>
                     {r.product?.name ?? '—'}
-                    {r.sku?.specText ? `（${r.sku.specText}）` : ''} · <b>{fmtMoney(r.price)}</b>/{r.product?.unit ?? '件'}
+                    {r.sku?.specText ? `（${r.sku.specText}）` : ''} · <b>{fmtMoney(r.price)}</b>/
+                    {r.product?.unit ?? t('件', 'pc')}
                   </span>
-                  <Popconfirm title="删除这条专属价？" onConfirm={() => delPrice(p.id, r.id)}>
+                  <Popconfirm
+                    title={t('删除这条专属价？', 'Remove this special price?')}
+                    onConfirm={() => delPrice(p.id, r.id)}
+                  >
                     <Button size="small" type="text" danger icon={<DeleteOutlined />} style={{ padding: '0 4px', height: 20 }} />
                   </Popconfirm>
                 </div>
@@ -364,7 +386,7 @@ export default function PartnersPage() {
                 border: mode === m ? `1px solid ${T.primary}33` : '1px solid transparent',
               }}
             >
-              {m === 'customer' ? '客户' : '供应商'}
+              {m === 'customer' ? t('客户', 'Customers') : t('供应商', 'Suppliers')}
             </span>
           ))}
         </div>
@@ -372,7 +394,11 @@ export default function PartnersPage() {
           key={mode}
           allowClear
           prefix={<SearchOutlined style={{ color: T.secondary }} />}
-          placeholder={isCustomer ? '搜客户名 / 电话' : '搜供应商名 / 电话'}
+          placeholder={
+            isCustomer
+              ? t('搜客户名 / 电话', 'Search customer name / phone')
+              : t('搜供应商名 / 电话', 'Search supplier name / phone')
+          }
           style={{ width: 220, borderRadius: 999 }}
           onChange={(e) => {
             const v = e.target.value.trim()
@@ -381,7 +407,7 @@ export default function PartnersPage() {
           }}
         />
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          新建{isCustomer ? '客户' : '供应商'}
+          {isCustomer ? t('新建客户', 'New customer') : t('新建供应商', 'New supplier')}
         </Button>
       </div>
 
@@ -397,13 +423,23 @@ export default function PartnersPage() {
           }}
         >
           <Typography.Text>
-            {isCustomer ? '共 ' : '欠 '}
+            {isCustomer ? t('共 ', '') : t('欠 ', '')}
             <b style={{ color: T.error }}>{owedCount}</b>
-            {isCustomer ? ' 个客户欠款，合计 ' : ' 个供应商货款，合计 '}
+            {isCustomer
+              ? t(' 个客户欠款，合计 ', ' customers owe you, totalling ')
+              : t(' 个供应商货款，合计 ', ' suppliers to pay, totalling ')}
             <b style={{ color: T.error }}>{fmtMoney(totalOwed)}</b>
           </Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            按{isCustomer ? '欠款' : '应付'}从高到低排列；打对账单去「对账单」页
+            {isCustomer
+              ? t(
+                  '按欠款从高到低排列；打对账单去「对账单」页',
+                  'Sorted by amount owed, highest first. For statements, go to the Statements page.',
+                )
+              : t(
+                  '按应付从高到低排列；打对账单去「对账单」页',
+                  'Sorted by amount payable, highest first. For statements, go to the Statements page.',
+                )}
           </Typography.Text>
         </div>
       )}
@@ -415,51 +451,85 @@ export default function PartnersPage() {
           dataSource={rows}
           loading={loading}
           size="middle"
-          locale={{ emptyText: <Empty description={`还没有${isCustomer ? '客户' : '供应商'}`} /> }}
+          locale={{
+            emptyText: (
+              <Empty
+                description={isCustomer ? t('还没有客户', 'No customers yet') : t('还没有供应商', 'No suppliers yet')}
+              />
+            ),
+          }}
           expandable={
             isCustomer
               ? { expandedRowRender: renderExpand, onExpand: (open, p) => open && loadExpand(p.id) }
               : undefined
           }
-          pagination={{ pageSize: 15, showTotal: (t) => `共 ${t} 个${isCustomer ? '客户' : '供应商'}` }}
+          pagination={{
+            pageSize: 15,
+            showTotal: (n) =>
+              isCustomer ? t(`共 ${n} 个客户`, `${n} customers`) : t(`共 ${n} 个供应商`, `${n} suppliers`),
+          }}
           scroll={{ x: 720 }}
         />
       </div>
 
       <Modal
-        title={`${editing ? '编辑' : '新建'}${isCustomer ? '客户' : '供应商'}`}
+        title={
+          isCustomer
+            ? editing
+              ? t('编辑客户', 'Edit customer')
+              : t('新建客户', 'New customer')
+            : editing
+              ? t('编辑供应商', 'Edit supplier')
+              : t('新建供应商', 'New supplier')
+        }
         open={editOpen}
         onCancel={() => setEditOpen(false)}
         onOk={submit}
         confirmLoading={busy}
-        okText="保存"
+        okText={t('保存', 'Save')}
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: '填名称' }]}>
-            <Input placeholder={isCustomer ? '客户名 / 公司名' : '供应商名'} maxLength={40} />
+          <Form.Item
+            name="name"
+            label={t('名称', 'Name')}
+            rules={[{ required: true, message: t('填名称', 'Enter a name') }]}
+          >
+            <Input
+              placeholder={
+                isCustomer ? t('客户名 / 公司名', 'Customer or company name') : t('供应商名', 'Supplier name')
+              }
+              maxLength={40}
+            />
           </Form.Item>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Form.Item name="contactPerson" label="联系人">
+            <Form.Item name="contactPerson" label={t('联系人', 'Contact')}>
               <Input maxLength={30} />
             </Form.Item>
-            <Form.Item name="phone" label="电话">
+            <Form.Item name="phone" label={t('电话', 'Phone')}>
               <Input maxLength={20} />
             </Form.Item>
           </div>
-          <Form.Item name="address" label="地址">
+          <Form.Item name="address" label={t('地址', 'Address')}>
             <Input maxLength={100} />
           </Form.Item>
           {isCustomer && (
-            <Form.Item name="productTypeId" label="主营品类（选填）">
-              <Select allowClear placeholder="不限" options={types.map((t) => ({ value: t.id, label: t.name }))} />
+            <Form.Item name="productTypeId" label={t('主营品类（选填）', 'Main category (optional)')}>
+              <Select
+                allowClear
+                placeholder={t('不限', 'Any')}
+                options={types.map((ty) => ({ value: ty.id, label: ty.name }))}
+              />
             </Form.Item>
           )}
-          <Form.Item name="notes" label="备注">
+          <Form.Item name="notes" label={t('备注', 'Notes')}>
             <Input.TextArea rows={2} maxLength={200} />
           </Form.Item>
           {editing && (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              建于 {dayjs(editing.createdAt).format('YYYY-MM-DD')}
+              {t(
+                `建于 ${dayjs(editing.createdAt).format('YYYY-MM-DD')}`,
+                `Created ${dayjs(editing.createdAt).format('YYYY-MM-DD')}`,
+              )}
             </Typography.Text>
           )}
         </Form>
@@ -467,20 +537,23 @@ export default function PartnersPage() {
 
       {/* 设专属价 */}
       <Modal
-        title={priceTarget ? `给「${priceTarget.name}」设专属价` : ''}
+        title={priceTarget ? t(`给「${priceTarget.name}」设专属价`, `Set a special price for "${priceTarget.name}"`) : ''}
         open={!!priceTarget}
         onCancel={() => setPriceTarget(null)}
         onOk={submitPrice}
         confirmLoading={priceBusy}
-        okText="保存"
+        okText={t('保存', 'Save')}
       >
         <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-          给这个客户的某个商品设单独的价格，开单卖给 TA 时自动用这个价（优先级：专属价 &gt; 上次成交价 &gt; 标价）。
+          {t(
+            '给这个客户的某个商品设单独的价格，开单卖给 TA 时自动用这个价（优先级：专属价 > 上次成交价 > 标价）。',
+            'Set a price for one product just for this customer. It is applied automatically when you sell to them (priority: special price > last price paid > list price).',
+          )}
         </Typography.Paragraph>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Select
             showSearch
-            placeholder="选商品规格"
+            placeholder={t('选商品规格', 'Pick a product variant')}
             value={priceSkuId}
             onChange={(v) => setPriceSkuId(v ?? null)}
             optionFilterProp="label"
@@ -491,7 +564,7 @@ export default function PartnersPage() {
             prefix="¥"
             min={0}
             precision={2}
-            placeholder="专属价"
+            placeholder={t('专属价', 'Special price')}
             value={priceValue}
             onChange={(v) => setPriceValue(v)}
           />

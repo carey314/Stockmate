@@ -5,6 +5,7 @@ import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
 import { useAuth } from '../auth'
 import { fmtMoney } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 interface Party {
@@ -81,8 +82,20 @@ export default function StatementsPage() {
   const labels = useMemo(
     () =>
       isCustomer
-        ? { debit: '应收', credit: '收款', opening: '期初欠款', closing: '期末欠款', title: '客户对账单' }
-        : { debit: '应付', credit: '付款', opening: '期初应付', closing: '期末应付', title: '供应商对账单' },
+        ? {
+            debit: t('应收', 'Receivable'),
+            credit: t('收款', 'Received'),
+            opening: t('期初欠款', 'Opening balance due'),
+            closing: t('期末欠款', 'Closing balance due'),
+            title: t('客户对账单', 'Customer Statement'),
+          }
+        : {
+            debit: t('应付', 'Payable'),
+            credit: t('付款', 'Paid'),
+            opening: t('期初应付', 'Opening balance payable'),
+            closing: t('期末应付', 'Closing balance payable'),
+            title: t('供应商对账单', 'Supplier Statement'),
+          },
     [isCustomer],
   )
 
@@ -106,20 +119,28 @@ export default function StatementsPage() {
                 border: mode === m ? `1px solid ${T.primary}33` : '1px solid transparent',
               }}
             >
-              {m === 'customer' ? '客户对账单' : '供应商对账单'}
+              {m === 'customer' ? t('客户对账单', 'Customer Statement') : t('供应商对账单', 'Supplier Statement')}
             </span>
           ))}
         </div>
         <Select
           showSearch
-          placeholder={isCustomer ? '选客户（欠款多的在前）' : '选供应商'}
+          placeholder={
+            isCustomer
+              ? t('选客户（欠款多的在前）', 'Pick a customer (largest balance first)')
+              : t('选供应商', 'Pick a supplier')
+          }
           value={partyId}
           onChange={setPartyId}
           optionFilterProp="label"
           style={{ width: 240 }}
           options={parties.map((p) => ({
             value: p.id,
-            label: `${p.name}${isCustomer && (p.owed ?? 0) > 0 ? `（欠 ${fmtMoney(p.owed!)}）` : ''}`,
+            label: `${p.name}${
+              isCustomer && (p.owed ?? 0) > 0
+                ? t(`（欠 ${fmtMoney(p.owed!)}）`, ` (owes ${fmtMoney(p.owed!)})`)
+                : ''
+            }`,
           }))}
         />
         <DatePicker.RangePicker
@@ -128,13 +149,21 @@ export default function StatementsPage() {
           onChange={(v) => v && v[0] && v[1] && setRange([v[0], v[1]])}
         />
         <Button type="primary" icon={<PrinterOutlined />} disabled={!data} onClick={() => window.print()}>
-          打印 / 存 PDF
+          {t('打印 / 存 PDF', 'Print / Save PDF')}
         </Button>
       </div>
 
       {error && <Alert className="no-print" type="warning" message={error} showIcon />}
       {!partyId && !error && (
-        <Empty className="no-print" style={{ paddingTop: 80 }} description={`选一个${isCustomer ? '客户' : '供应商'}生成对账单`} />
+        <Empty
+          className="no-print"
+          style={{ paddingTop: 80 }}
+          description={
+            isCustomer
+              ? t('选一个客户生成对账单', 'Pick a customer to generate a statement')
+              : t('选一个供应商生成对账单', 'Pick a supplier to generate a statement')
+          }
+        />
       )}
       {loading && <Skeleton active paragraph={{ rows: 8 }} />}
 
@@ -168,24 +197,29 @@ export default function StatementsPage() {
             }}
           >
             <span>
-              {isCustomer ? '客户' : '供应商'}：<b style={{ color: '#111' }}>{party.name}</b>
+              {isCustomer ? t('客户：', 'Customer: ') : t('供应商：', 'Supplier: ')}
+              <b style={{ color: '#111' }}>{party.name}</b>
               {party.phone ? `（${party.phone}）` : ''}
             </span>
             <span>
-              账期：{range[0].format('YYYY-MM-DD')} ~ {range[1].format('YYYY-MM-DD')}
+              {t('账期：', 'Period: ')}
+              {range[0].format('YYYY-MM-DD')} ~ {range[1].format('YYYY-MM-DD')}
             </span>
-            <span>打印时间：{dayjs().format('YYYY-MM-DD HH:mm')}</span>
+            <span>
+              {t('打印时间：', 'Printed: ')}
+              {dayjs().format('YYYY-MM-DD HH:mm')}
+            </span>
           </div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #999', textAlign: 'left', color: '#555' }}>
-                <th style={{ padding: '6px 4px', fontWeight: 600 }}>日期</th>
-                <th style={{ padding: '6px 4px', fontWeight: 600 }}>类型</th>
-                <th style={{ padding: '6px 4px', fontWeight: 600 }}>单号/账户</th>
+                <th style={{ padding: '6px 4px', fontWeight: 600 }}>{t('日期', 'Date')}</th>
+                <th style={{ padding: '6px 4px', fontWeight: 600 }}>{t('类型', 'Type')}</th>
+                <th style={{ padding: '6px 4px', fontWeight: 600 }}>{t('单号/账户', 'Doc No. / Account')}</th>
                 <th style={{ padding: '6px 4px', fontWeight: 600, textAlign: 'right' }}>{labels.debit}</th>
                 <th style={{ padding: '6px 4px', fontWeight: 600, textAlign: 'right' }}>{labels.credit}</th>
-                <th style={{ padding: '6px 4px', fontWeight: 600 }}>备注</th>
+                <th style={{ padding: '6px 4px', fontWeight: 600 }}>{t('备注', 'Note')}</th>
               </tr>
             </thead>
             <tbody>
@@ -212,13 +246,13 @@ export default function StatementsPage() {
               {data.rows.length === 0 && (
                 <tr>
                   <td colSpan={6} style={{ padding: 14, textAlign: 'center', color: '#888' }}>
-                    本期无往来
+                    {t('本期无往来', 'No transactions in this period')}
                   </td>
                 </tr>
               )}
               <tr style={{ borderTop: '1px solid #999' }}>
                 <td colSpan={3} style={{ padding: '7px 4px', fontWeight: 600 }}>
-                  本期合计
+                  {t('本期合计', 'Period total')}
                 </td>
                 <td style={{ padding: '7px 4px', textAlign: 'right', fontWeight: 700 }}>{fmtMoney(data.periodDebit)}</td>
                 <td style={{ padding: '7px 4px', textAlign: 'right', fontWeight: 700 }}>{fmtMoney(data.periodCredit)}</td>
@@ -244,11 +278,14 @@ export default function StatementsPage() {
               color: '#444',
             }}
           >
-            <span>制单（盖章）：____________</span>
-            <span>对方确认（签字）：____________</span>
+            <span>{t('制单（盖章）：____________', 'Prepared by (stamp): ____________')}</span>
+            <span>{t('对方确认（签字）：____________', 'Confirmed by (signature): ____________')}</span>
           </div>
           <Typography.Paragraph style={{ fontSize: 11, color: '#999', marginTop: 18, marginBottom: 0 }}>
-            说明：单据金额为开单时原始金额，退货以「退货冲减」行核销；如对账目有疑问，请在收到本单 7 日内提出。
+            {t(
+              '说明：单据金额为开单时原始金额，退货以「退货冲减」行核销；如对账目有疑问，请在收到本单 7 日内提出。',
+              'Note: document amounts are the original amounts at the time of issue; returns are settled through separate reversal rows. Please raise any discrepancy within 7 days of receiving this statement.',
+            )}
           </Typography.Paragraph>
         </div>
       )}

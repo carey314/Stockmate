@@ -86,7 +86,7 @@ export default function SettingsPage() {
         await api.put('/settings/main-type', { productTypeId: mainType })
       }
       await refreshProfile()
-      message.success('店铺设置已保存')
+      message.success(t('店铺设置已保存', 'Store settings saved'))
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -116,7 +116,12 @@ export default function SettingsPage() {
         realName: v.realName.trim(),
         phone: v.phone?.trim() || null,
       })
-      message.success(`员工「${v.realName}」已创建，把用户名和密码告诉 TA 即可在 App/网页登录`)
+      message.success(
+        t(
+          `员工「${v.realName}」已创建，把用户名和密码告诉 TA 即可在 App/网页登录`,
+          `Staff account "${v.realName}" created. Share the username and password so they can sign in on the app or web.`,
+        ),
+      )
       setStaffOpen(false)
       staffForm.resetFields()
       loadUsers()
@@ -130,7 +135,11 @@ export default function SettingsPage() {
   const toggleUser = async (u: UserRow) => {
     try {
       await api.put(`/system/users/${u.id}/toggle`)
-      message.success(u.status === 1 ? `已停用 ${u.realName}（TA 的登录立即失效）` : `已启用 ${u.realName}`)
+      message.success(
+        u.status === 1
+          ? t(`已停用 ${u.realName}（TA 的登录立即失效）`, `${u.realName} disabled — their sign-in stops working immediately`)
+          : t(`已启用 ${u.realName}`, `${u.realName} enabled`),
+      )
       loadUsers()
     } catch (e) {
       message.error((e as Error).message)
@@ -146,7 +155,7 @@ export default function SettingsPage() {
     setResetBusy(true)
     try {
       await api.put(`/system/users/${resetTarget.id}/password`, { password: v.password })
-      message.success(`已重置 ${resetTarget.realName} 的密码`)
+      message.success(t(`已重置 ${resetTarget.realName} 的密码`, `Password reset for ${resetTarget.realName}`))
       setResetTarget(null)
       resetForm.resetFields()
     } catch (e) {
@@ -165,7 +174,7 @@ export default function SettingsPage() {
     setPwdBusy(true)
     try {
       await api.put('/auth/password', { oldPassword: v.oldPassword, newPassword: v.newPassword })
-      message.success('密码已修改，下次登录用新密码')
+      message.success(t('密码已修改，下次登录用新密码', 'Password changed. Use the new one next time you sign in.'))
       pwdForm.resetFields()
     } catch (e) {
       message.error((e as Error).message)
@@ -177,17 +186,23 @@ export default function SettingsPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 860 }}>
       {isAdmin && (
-        <Section title="店铺信息" desc="店名用于票据抬头和对账单；主营品类是商品页/开单/盘点的默认筛选">
+        <Section
+          title={t('店铺信息', 'Store info')}
+          desc={t(
+            '店名用于票据抬头和对账单；主营品类是商品页/开单/盘点的默认筛选',
+            'The store name appears on receipts and statements; the main category is the default filter on products, order creation and stocktakes',
+          )}
+        >
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>
-              <div style={{ fontSize: 12, color: T.secondary, marginBottom: 6 }}>店名</div>
+              <div style={{ fontSize: 12, color: T.secondary, marginBottom: 6 }}>{t('店名', 'Store name')}</div>
               <Input value={shopName} onChange={(e) => setShopName(e.target.value)} style={{ width: 220 }} maxLength={30} />
             </div>
             <div>
-              <div style={{ fontSize: 12, color: T.secondary, marginBottom: 6 }}>主营品类</div>
+              <div style={{ fontSize: 12, color: T.secondary, marginBottom: 6 }}>{t('主营品类', 'Main category')}</div>
               <Select
                 allowClear
-                placeholder="不设置"
+                placeholder={t('不设置', 'Not set')}
                 value={mainType}
                 onChange={(v) => setMainType(v ?? null)}
                 options={types.map((t) => ({ value: t.id, label: t.name }))}
@@ -195,7 +210,7 @@ export default function SettingsPage() {
               />
             </div>
             <Button type="primary" loading={savingShop} onClick={saveShop}>
-              保存
+              {t('保存', 'Save')}
             </Button>
           </div>
         </Section>
@@ -203,12 +218,15 @@ export default function SettingsPage() {
 
       {isAdmin && (
         <Section
-          title="员工管理"
-          desc="员工用自己的账号登录 App 和网页开单、管库存；看不到：利润 / 资金流水 / 员工业绩 / AI 问生意 / 导出，也不能删商品删品类"
+          title={t('员工管理', 'Staff')}
+          desc={t(
+            '员工用自己的账号登录 App 和网页开单、管库存；看不到：利润 / 资金流水 / 员工业绩 / AI 问生意 / 导出，也不能删商品删品类',
+            'Staff sign in with their own accounts to create orders and manage stock. They cannot see profit, cash flow, staff performance, Ask AI or exports, and cannot delete products or categories.',
+          )}
         >
           <div style={{ marginBottom: 12 }}>
             <Button type="primary" icon={<UserAddOutlined />} onClick={() => setStaffOpen(true)}>
-              新建员工账号
+              {t('新建员工账号', 'New staff account')}
             </Button>
           </div>
           <Table<UserRow>
@@ -219,46 +237,50 @@ export default function SettingsPage() {
             pagination={false}
             columns={[
               {
-                title: '姓名',
+                title: t('姓名', 'Name'),
                 dataIndex: 'realName',
                 render: (v, u) => (
                   <span>
                     {v}
                     {u.id === user?.id && (
                       <Tag style={{ marginLeft: 8, borderRadius: 999 }} color="purple">
-                        我
+                        {t('我', 'Me')}
                       </Tag>
                     )}
                   </span>
                 ),
               },
-              { title: '登录用户名', dataIndex: 'username', render: (v) => <code>{v}</code> },
+              { title: t('登录用户名', 'Username'), dataIndex: 'username', render: (v) => <code>{v}</code> },
               {
-                title: '角色',
+                title: t('角色', 'Role'),
                 dataIndex: 'role',
                 width: 90,
                 render: (r) => (
                   <Tag color={r === 'admin' ? 'purple' : 'default'} style={{ borderRadius: 999 }}>
-                    {r === 'admin' ? '老板' : '员工'}
+                    {r === 'admin' ? t('老板', 'Owner') : t('员工', 'Staff')}
                   </Tag>
                 ),
               },
               {
-                title: '创建时间',
+                title: t('创建时间', 'Created'),
                 dataIndex: 'createdAt',
                 width: 120,
                 render: (v) => dayjs(v).format('YYYY-MM-DD'),
               },
               {
-                title: '启用',
+                title: t('启用', 'Active'),
                 key: 'status',
                 width: 80,
                 render: (_, u) =>
                   u.id === user?.id ? (
-                    <Switch checked disabled title="不能停用自己" />
+                    <Switch checked disabled title={t('不能停用自己', 'You cannot disable your own account')} />
                   ) : (
                     <Popconfirm
-                      title={u.status === 1 ? `停用 ${u.realName}？TA 的登录立即失效` : `启用 ${u.realName}？`}
+                      title={
+                        u.status === 1
+                          ? t(`停用 ${u.realName}？TA 的登录立即失效`, `Disable ${u.realName}? Their sign-in stops working immediately.`)
+                          : t(`启用 ${u.realName}？`, `Enable ${u.realName}?`)
+                      }
                       onConfirm={() => toggleUser(u)}
                     >
                       <Switch checked={u.status === 1} />
@@ -266,12 +288,12 @@ export default function SettingsPage() {
                   ),
               },
               {
-                title: '操作',
+                title: t('操作', 'Actions'),
                 key: 'ops',
                 width: 110,
                 render: (_, u) => (
                   <Button size="small" type="text" icon={<KeyOutlined />} onClick={() => setResetTarget(u)}>
-                    重置密码
+                    {t('重置密码', 'Reset password')}
                   </Button>
                 ),
               },
@@ -355,69 +377,72 @@ export default function SettingsPage() {
             />
             <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginTop: 8 }}>
               {t(
-                '目前覆盖导航与通用界面，业务页面的中文文案在逐步翻译中。',
-                'Navigation and shared UI are translated; business pages are being translated gradually.',
+                '全部界面均支持中英文；商品、客户等你录入的数据保持原文。',
+                'The entire interface supports Chinese and English; your own data (products, customers…) stays as entered.',
               )}
             </Typography.Text>
           </div>
         </div>
       </Section>
 
-      <Section title="修改我的密码" desc="改完下次登录生效，当前登录不受影响">
+      <Section
+        title={t('修改我的密码', 'Change my password')}
+        desc={t('改完下次登录生效，当前登录不受影响', 'Takes effect at your next sign-in; your current session stays active')}
+      >
         <Form form={pwdForm} layout="inline">
-          <Form.Item name="oldPassword" rules={[{ required: true, message: '填旧密码' }]}>
-            <Input.Password placeholder="旧密码" style={{ width: 170 }} />
+          <Form.Item name="oldPassword" rules={[{ required: true, message: t('填旧密码', 'Enter your current password') }]}>
+            <Input.Password placeholder={t('旧密码', 'Current password')} style={{ width: 170 }} />
           </Form.Item>
           <Form.Item
             name="newPassword"
             rules={[
-              { required: true, message: '填新密码' },
-              { min: 6, message: '至少 6 位' },
+              { required: true, message: t('填新密码', 'Enter a new password') },
+              { min: 6, message: t('至少 6 位', 'At least 6 characters') },
             ]}
           >
-            <Input.Password placeholder="新密码（至少6位）" style={{ width: 190 }} />
+            <Input.Password placeholder={t('新密码（至少6位）', 'New password (6+ characters)')} style={{ width: 190 }} />
           </Form.Item>
           <Button type="primary" loading={pwdBusy} onClick={changePwd}>
-            修改密码
+            {t('修改密码', 'Change password')}
           </Button>
         </Form>
       </Section>
 
       {/* 新建员工 */}
       <Modal
-        title="新建员工账号"
+        title={t('新建员工账号', 'New staff account')}
         open={staffOpen}
         onCancel={() => setStaffOpen(false)}
         onOk={createStaff}
         confirmLoading={staffBusy}
-        okText="创建"
+        okText={t('创建', 'Create')}
       >
         <Form form={staffForm} layout="vertical">
-          <Form.Item name="realName" label="姓名" rules={[{ required: true, message: '填姓名' }]}>
-            <Input placeholder="小张" maxLength={30} />
+          <Form.Item name="realName" label={t('姓名', 'Name')} rules={[{ required: true, message: t('填姓名', 'Enter a name') }]}>
+            <Input placeholder={t('小张', 'e.g. Alex')} maxLength={30} />
           </Form.Item>
           <Form.Item
             name="username"
-            label="登录用户名"
+            label={t('登录用户名', 'Username')}
             rules={[
-              { required: true, message: '填用户名' },
-              { min: 3, message: '至少 3 位' },
-              { pattern: /^[a-zA-Z0-9_一-龥]+$/, message: '只能是中英文、数字、下划线' },
+              { required: true, message: t('填用户名', 'Enter a username') },
+              { min: 3, message: t('至少 3 位', 'At least 3 characters') },
+              { pattern: /^[a-zA-Z0-9_一-龥]+$/, message: t('只能是中英文、数字、下划线', 'Letters, Chinese characters, digits and underscores only') },
             ]}
           >
-            <Input placeholder="TA 登录用的账号，如 xiaozhang" maxLength={20} />
+            <Input placeholder={t('TA 登录用的账号，如 xiaozhang', 'The account they sign in with, e.g. alexlee')} maxLength={20} />
           </Form.Item>
           <Form.Item
             name="password"
-            label="初始密码"
+            label={t('初始密码', 'Initial password')}
             rules={[
-              { required: true, message: '填密码' },
-              { min: 6, message: '至少 6 位' },
+              { required: true, message: t('填密码', 'Enter a password') },
+              { min: 6, message: t('至少 6 位', 'At least 6 characters') },
             ]}
           >
-            <Input.Password placeholder="至少 6 位，告诉员工后 TA 可自行修改" />
+            <Input.Password placeholder={t('至少 6 位，告诉员工后 TA 可自行修改', 'At least 6 characters; they can change it after signing in')} />
           </Form.Item>
-          <Form.Item name="phone" label="手机（选填）">
+          <Form.Item name="phone" label={t('手机（选填）', 'Phone (optional)')}>
             <Input maxLength={20} />
           </Form.Item>
         </Form>
@@ -425,23 +450,23 @@ export default function SettingsPage() {
 
       {/* 重置密码 */}
       <Modal
-        title={resetTarget ? `重置 ${resetTarget.realName} 的密码` : ''}
+        title={resetTarget ? t(`重置 ${resetTarget.realName} 的密码`, `Reset password for ${resetTarget.realName}`) : ''}
         open={!!resetTarget}
         onCancel={() => setResetTarget(null)}
         onOk={resetPassword}
         confirmLoading={resetBusy}
-        okText="重置"
+        okText={t('重置', 'Reset')}
       >
         <Form form={resetForm} layout="vertical">
           <Form.Item
             name="password"
-            label="新密码"
+            label={t('新密码', 'New password')}
             rules={[
-              { required: true, message: '填新密码' },
-              { min: 6, message: '至少 6 位' },
+              { required: true, message: t('填新密码', 'Enter a new password') },
+              { min: 6, message: t('至少 6 位', 'At least 6 characters') },
             ]}
           >
-            <Input.Password placeholder="至少 6 位" />
+            <Input.Password placeholder={t('至少 6 位', 'At least 6 characters')} />
           </Form.Item>
         </Form>
       </Modal>

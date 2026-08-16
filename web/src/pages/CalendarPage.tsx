@@ -18,6 +18,7 @@ import dayjs, { type Dayjs } from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { fmtMoney } from '../lib/format'
+import { dateFormat, t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 import { useAuth } from '../auth'
 import CountUp from '../components/CountUp'
@@ -59,17 +60,22 @@ interface DayResp {
   events: CalEvent[]
 }
 
+// key 与后端 calendar.js 的 kind 对齐（不可改），label 是渲染文案
 const KIND: Record<string, { label: string; icon: ReactNode }> = {
-  sale: { label: '卖货收款', icon: <ShoppingCartOutlined /> },
-  receive: { label: '收回欠款', icon: <DollarOutlined /> },
-  purchase: { label: '进货付款', icon: <InboxOutlined /> },
-  refundOut: { label: '退款给客户', icon: <RollbackOutlined /> },
-  refundIn: { label: '供应商退回', icon: <RetweetOutlined /> },
-  dailyIncome: { label: '其他收入', icon: <WalletOutlined /> },
-  expense: { label: '开销', icon: <CreditCardOutlined /> },
-  otherIn: { label: '收入', icon: <PlusCircleOutlined /> },
-  otherOut: { label: '支出', icon: <MinusCircleOutlined /> },
+  sale: { label: t('卖货收款', 'Sale payment'), icon: <ShoppingCartOutlined /> },
+  receive: { label: t('收回欠款', 'Debt collected'), icon: <DollarOutlined /> },
+  purchase: { label: t('进货付款', 'Purchase payment'), icon: <InboxOutlined /> },
+  refundOut: { label: t('退款给客户', 'Refund to customer'), icon: <RollbackOutlined /> },
+  refundIn: { label: t('供应商退回', 'Refund from supplier'), icon: <RetweetOutlined /> },
+  dailyIncome: { label: t('其他收入', 'Other income'), icon: <WalletOutlined /> },
+  expense: { label: t('开销', 'Expense'), icon: <CreditCardOutlined /> },
+  otherIn: { label: t('收入', 'Income'), icon: <PlusCircleOutlined /> },
+  otherOut: { label: t('支出', 'Expense'), icon: <MinusCircleOutlined /> },
 }
+
+const L_INCOME = t('收入', 'Income')
+const L_EXPENSE = t('支出', 'Expense')
+const L_NET = t('净', 'Net')
 
 const GREEN = T.emerald
 const RED = T.error
@@ -80,13 +86,19 @@ const fmtNet = (n: number) => {
   const abs = Math.abs(n)
   const s =
     abs >= 10000
-      ? `${(abs / 10000).toFixed(1).replace(/\.0$/, '')}万`
+      ? t(
+          `${(abs / 10000).toFixed(1).replace(/\.0$/, '')}万`,
+          `${(abs / 1000).toFixed(1).replace(/\.0$/, '')}k`,
+        )
       : abs.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
   return `${sign}¥${s}`
 }
 const netColor = (n: number) => (n > 0 ? GREEN : n < 0 ? RED : T.secondary)
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
+const WEEKDAYS_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+// 周一 = 0（表头与 Drawer 标题共用，两处必须一致）
+const weekdayLabel = (i: number) => t(`周${WEEKDAYS[i]}`, WEEKDAYS_EN[i])
 // 周一开头（与 App 月历一致）
 const mondayOf = (d: Dayjs) => d.subtract((d.day() + 6) % 7, 'day').startOf('day')
 
@@ -211,7 +223,7 @@ export default function CalendarPage() {
   if (!isAdmin) {
     return (
       <div style={{ ...cardStyle, padding: 48 }}>
-        <Empty description="收益日历仅老板可用" />
+        <Empty description={t('收益日历仅老板可用', 'The cash calendar is available to the owner only')} />
       </div>
     )
   }
@@ -220,10 +232,11 @@ export default function CalendarPage() {
     setAnchor((a) => (view === 'month' ? a.add(dir, 'month').startOf('month') : a.add(dir * 7, 'day')))
 
   const weekStarts7 = Array.from({ length: 7 }, (_, i) => mondayOf(anchor).add(i, 'day'))
+  const monthDayFmt = t('M月D日', 'MMM D')
   const title =
     view === 'month'
-      ? anchor.format('YYYY年M月')
-      : `${weekStarts7[0].format('M月D日')} – ${weekStarts7[6].format('M月D日')}`
+      ? anchor.format(t('YYYY年M月', 'MMMM YYYY'))
+      : `${weekStarts7[0].format(monthDayFmt)} – ${weekStarts7[6].format(monthDayFmt)}`
 
   // 顶部汇总条：月视图汇总当月，周视图汇总本周（都来自已加载数据，不多打接口）
   const summarySource: DayTotal[] =
@@ -244,8 +257,8 @@ export default function CalendarPage() {
           value={view}
           onChange={(v) => setView(v as 'month' | 'week')}
           options={[
-            { label: '月', value: 'month' },
-            { label: '周', value: 'week' },
+            { label: t('月', 'Month'), value: 'month' },
+            { label: t('周', 'Week'), value: 'week' },
           ]}
         />
         <Button icon={<LeftOutlined />} size="small" shape="circle" onClick={() => step(-1)} />
@@ -254,22 +267,26 @@ export default function CalendarPage() {
         </span>
         <Button icon={<RightOutlined />} size="small" shape="circle" onClick={() => step(1)} />
         <Button size="small" onClick={() => setAnchor(today)}>
-          回今天
+          {t('回今天', 'Today')}
         </Button>
         <span style={{ marginLeft: 'auto', fontSize: 13, color: T.secondary }}>
-          {view === 'month' ? '本月' : '本周'}收入{' '}
+          {view === 'month'
+            ? t('本月收入', 'Income this month')
+            : t('本周收入', 'Income this week')}{' '}
           <b style={{ color: GREEN }}>
             <CountUp value={sum.income} format={fmtMoney} speedBlur />
           </b>{' '}
-          · 支出{' '}
+          · {L_EXPENSE}{' '}
           <b style={{ color: RED }}>
             <CountUp value={sum.expense} format={fmtMoney} speedBlur />
           </b>{' '}
-          · 净{' '}
+          · {L_NET}{' '}
           <b style={{ color: netColor(sumNet) }}>
             <CountUp value={sumNet} format={fmtNet} />
           </b>
-          <span style={{ marginLeft: 8, color: T.outlineVariant }}>现金口径，与资金流水一致</span>
+          <span style={{ marginLeft: 8, color: T.outlineVariant }}>
+            {t('现金口径，与资金流水一致', 'Cash basis, matching the cash flow report')}
+          </span>
         </span>
       </div>
 
@@ -279,9 +296,9 @@ export default function CalendarPage() {
           <div style={{ minWidth: 720 }}>
           {/* 星期表头 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 8 }}>
-            {WEEKDAYS.map((w) => (
+            {WEEKDAYS.map((w, i) => (
               <div key={w} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: T.secondary }}>
-                周{w}
+                {weekdayLabel(i)}
               </div>
             ))}
           </div>
@@ -345,7 +362,9 @@ export default function CalendarPage() {
                       <EventCard key={j} ev={ev} />
                     ))}
                     {more > 0 && (
-                      <span style={{ fontSize: 11, color: T.secondary, paddingLeft: 6 }}>+{more} 笔</span>
+                      <span style={{ fontSize: 11, color: T.secondary, paddingLeft: 6 }}>
+                        {t(`+${more} 笔`, `+${more} more`)}
+                      </span>
                     )}
                   </div>
                 )
@@ -395,7 +414,7 @@ export default function CalendarPage() {
                       <span
                         style={{ fontSize: 11, color: T.primary, fontWeight: 600, textAlign: 'center', marginTop: 2 }}
                       >
-                        +{more} 笔，点开看全部
+                        {t(`+${more} 笔，点开看全部`, `+${more} more — tap to see all`)}
                       </span>
                     )}
                   </div>
@@ -414,8 +433,8 @@ export default function CalendarPage() {
         width={520}
         title={
           dayResp
-            ? `${dayjs(dayResp.date).format('YYYY年M月D日')} 周${WEEKDAYS[(dayjs(dayResp.date).day() + 6) % 7]}`
-            : '加载中'
+            ? `${dayjs(dayResp.date).format(dateFormat)} ${weekdayLabel((dayjs(dayResp.date).day() + 6) % 7)}`
+            : t('加载中', 'Loading')
         }
         styles={{ body: { padding: 20 } }}
       >
@@ -439,15 +458,15 @@ export default function CalendarPage() {
             >
               {(
                 [
-                  ['收入', dayResp.day.income, GREEN],
-                  ['支出', dayResp.day.expense, RED],
-                  ['净', dayResp.day.net, netColor(dayResp.day.net)],
+                  [L_INCOME, dayResp.day.income, GREEN],
+                  [L_EXPENSE, dayResp.day.expense, RED],
+                  [L_NET, dayResp.day.net, netColor(dayResp.day.net)],
                 ] as const
               ).map(([label, v, color]) => (
                 <div key={label} style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 12, color: T.secondary }}>{label}</div>
                   <div style={{ fontSize: 18, fontWeight: 800, color }}>
-                    <CountUp value={v} format={label === '净' ? fmtNet : fmtMoney} duration={500} />
+                    <CountUp value={v} format={label === L_NET ? fmtNet : fmtMoney} duration={500} />
                   </div>
                 </div>
               ))}
@@ -455,26 +474,39 @@ export default function CalendarPage() {
             {/* 月/年累计 */}
             <div style={{ fontSize: 12, color: T.secondary, lineHeight: '20px' }}>
               <div>
-                本月累计：收 <b style={{ color: GREEN }}>{fmtMoney(dayResp.month.income)}</b> · 支{' '}
-                <b style={{ color: RED }}>{fmtMoney(dayResp.month.expense)}</b> · 净{' '}
+                {t('本月累计：收 ', 'Month to date: in ')}
+                <b style={{ color: GREEN }}>{fmtMoney(dayResp.month.income)}</b>
+                {t(' · 支 ', ' · out ')}
+                <b style={{ color: RED }}>{fmtMoney(dayResp.month.expense)}</b>
+                {t(' · 净 ', ' · net ')}
                 <b style={{ color: netColor(dayResp.month.net) }}>{fmtNet(dayResp.month.net)}</b>
               </div>
               <div>
-                今年累计：收 <b style={{ color: GREEN }}>{fmtMoney(dayResp.year.income)}</b> · 支{' '}
-                <b style={{ color: RED }}>{fmtMoney(dayResp.year.expense)}</b> · 净{' '}
+                {t('今年累计：收 ', 'Year to date: in ')}
+                <b style={{ color: GREEN }}>{fmtMoney(dayResp.year.income)}</b>
+                {t(' · 支 ', ' · out ')}
+                <b style={{ color: RED }}>{fmtMoney(dayResp.year.expense)}</b>
+                {t(' · 净 ', ' · net ')}
                 <b style={{ color: netColor(dayResp.year.net) }}>{fmtNet(dayResp.year.net)}</b>
               </div>
             </div>
             {/* 逐笔清单：一天几百笔靠分页渲染扛住 */}
             {dayResp.events.length === 0 ? (
-              <Empty description="这天没有收支" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty
+                description={t('这天没有收支', 'No money in or out on this day')}
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
             ) : (
               <List
                 size="small"
                 dataSource={dayResp.events}
                 pagination={
                   dayResp.events.length > 30
-                    ? { pageSize: 30, size: 'small', showTotal: (t) => `共 ${t} 笔` }
+                    ? {
+                        pageSize: 30,
+                        size: 'small',
+                        showTotal: (n: number) => t(`共 ${n} 笔`, `${n} entries in total`),
+                      }
                     : false
                 }
                 renderItem={(ev) => {

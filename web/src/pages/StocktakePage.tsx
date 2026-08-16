@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import dayjs from 'dayjs'
 import api from '../api/client'
 import { fmtQty, fmtTime } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 // ===== 类型（严格对齐 stocktakes 控制器契约）=====
@@ -79,7 +80,7 @@ export default function StocktakePage() {
   const [types, setTypes] = useState<ProductType[]>([])
   const typeName = useMemo(() => {
     const m = new Map<number, string>()
-    types.forEach((t) => m.set(t.id, t.name))
+    types.forEach((pt) => m.set(pt.id, pt.name))
     return m
   }, [types])
 
@@ -193,7 +194,7 @@ export default function StocktakePage() {
   }
 
   const submit = async () => {
-    if (sheet.length === 0) return message.warning('该范围没有可盘点的规格')
+    if (sheet.length === 0) return message.warning(t('该范围没有可盘点的规格', 'No SKUs to count in this scope'))
     setSubmitBusy(true)
     try {
       await api.post('/stocktakes', {
@@ -201,7 +202,7 @@ export default function StocktakePage() {
         notes: notes.trim() || undefined,
         items: sheet.map((r) => ({ skuId: r.skuId, actualQty: r.actualQty })),
       })
-      message.success('盘点已提交，差异已自动调整库存并留流水')
+      message.success(t('盘点已提交，差异已自动调整库存并留流水', 'Stocktake submitted — differences adjusted stock and logged'))
       setCreateOpen(false)
       setPage(1)
       load()
@@ -214,45 +215,45 @@ export default function StocktakePage() {
 
   // ===== 列表列 =====
   const columns: ColumnsType<StocktakeRow> = [
-    { title: '单号', dataIndex: 'orderNo', render: (v) => <span style={{ fontFamily: 'monospace' }}>{v}</span> },
+    { title: t('单号', 'Order No.'), dataIndex: 'orderNo', render: (v) => <span style={{ fontFamily: 'monospace' }}>{v}</span> },
     {
-      title: '盘点范围',
+      title: t('盘点范围', 'Scope'),
       dataIndex: 'productTypeId',
       width: 120,
       render: (v: number | null) =>
-        v == null ? <span style={{ color: T.secondary }}>全部</span> : typeName.get(v) ?? `品类#${v}`,
+        v == null ? <span style={{ color: T.secondary }}>{t('全部', 'All')}</span> : typeName.get(v) ?? t(`品类#${v}`, `Category #${v}`),
     },
-    { title: '盘了几项', dataIndex: 'totalItems', width: 90, align: 'center', render: (v) => fmtQty(v) },
+    { title: t('盘了几项', 'Items counted'), dataIndex: 'totalItems', width: 90, align: 'center', render: (v) => fmtQty(v) },
     {
-      title: '差异项',
+      title: t('差异项', 'Differences'),
       dataIndex: 'diffItems',
       width: 80,
       align: 'center',
       render: (v: number) => (v > 0 ? <b style={{ color: T.orange }}>{fmtQty(v)}</b> : <span style={{ color: T.secondary }}>0</span>),
     },
     {
-      title: '盘盈',
+      title: t('盘盈', 'Surplus'),
       dataIndex: 'gainQty',
       width: 80,
       align: 'right',
       render: (v: number) => (v > 0 ? <span style={{ color: T.emerald }}>+{fmtQty(v)}</span> : <span style={{ color: T.secondary }}>-</span>),
     },
     {
-      title: '盘亏',
+      title: t('盘亏', 'Shortage'),
       dataIndex: 'lossQty',
       width: 80,
       align: 'right',
       render: (v: number) => (v > 0 ? <span style={{ color: T.error }}>-{fmtQty(v)}</span> : <span style={{ color: T.secondary }}>-</span>),
     },
-    { title: '时间', dataIndex: 'createdAt', width: 130, render: (v) => fmtTime(v) },
+    { title: t('时间', 'Time'), dataIndex: 'createdAt', width: 130, render: (v) => fmtTime(v) },
     {
-      title: '操作',
+      title: t('操作', 'Actions'),
       key: 'ops',
       width: 80,
       fixed: 'right',
       render: (_, r) => (
         <Button size="small" type="link" onClick={() => openDetail(r.id)}>
-          详情
+          {t('详情', 'Details')}
         </Button>
       ),
     },
@@ -264,10 +265,13 @@ export default function StocktakePage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          新建盘点
+          {t('新建盘点', 'New stocktake')}
         </Button>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          盘点 = 清点实物数量，提交后差异自动调整库存并留流水
+          {t(
+            '盘点 = 清点实物数量，提交后差异自动调整库存并留流水',
+            'A stocktake counts physical quantities; on submit, differences adjust stock automatically and are logged',
+          )}
         </Typography.Text>
       </div>
 
@@ -278,14 +282,20 @@ export default function StocktakePage() {
           dataSource={rows}
           loading={loading}
           size="middle"
-          locale={{ emptyText: <Empty description="还没有盘点记录，点「新建盘点」开始第一次清点" /> }}
+          locale={{
+            emptyText: (
+              <Empty
+                description={t('还没有盘点记录，点「新建盘点」开始第一次清点', 'No stocktakes yet — tap “New stocktake” to run your first count')}
+              />
+            ),
+          }}
           onRow={(r) => ({ onClick: () => openDetail(r.id), style: { cursor: 'pointer' } })}
           pagination={{
             current: page,
             pageSize,
             total,
             showSizeChanger: true,
-            showTotal: (t) => `共 ${t} 张盘点单`,
+            showTotal: (n) => t(`共 ${n} 张盘点单`, `${n} stocktakes`),
             onChange: (p, ps) => {
               setPage(p)
               setPageSize(ps)
@@ -300,13 +310,18 @@ export default function StocktakePage() {
         open={!!detail || detailLoading}
         onClose={() => setDetail(null)}
         size="large"
-        title={detail ? `盘点单 ${detail.orderNo}` : '加载中'}
+        title={detail ? t(`盘点单 ${detail.orderNo}`, `Stocktake ${detail.orderNo}`) : t('加载中', 'Loading')}
       >
         {detail && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
               <span>
-                范围：<b>{detail.productTypeId == null ? '全部' : typeName.get(detail.productTypeId) ?? `品类#${detail.productTypeId}`}</b>
+                {t('范围：', 'Scope: ')}
+                <b>
+                  {detail.productTypeId == null
+                    ? t('全部', 'All')
+                    : typeName.get(detail.productTypeId) ?? t(`品类#${detail.productTypeId}`, `Category #${detail.productTypeId}`)}
+                </b>
               </span>
               <span style={{ color: T.secondary }}>
                 {dayjs(detail.createdAt).format('YYYY-MM-DD HH:mm')} · {detail.operator?.realName ?? ''}
@@ -314,7 +329,7 @@ export default function StocktakePage() {
             </div>
             {detail.notes && (
               <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 12 }}>
-                备注：{detail.notes}
+                {t('备注：', 'Notes: ')}{detail.notes}
               </Typography.Paragraph>
             )}
             <Table<StocktakeItem>
@@ -322,10 +337,10 @@ export default function StocktakePage() {
               size="small"
               dataSource={detail.items}
               pagination={false}
-              locale={{ emptyText: <Empty description="无明细" /> }}
+              locale={{ emptyText: <Empty description={t('无明细', 'No line items')} /> }}
               columns={[
                 {
-                  title: '商品',
+                  title: t('商品', 'Product'),
                   render: (_, it) => (
                     <span>
                       {it.productName}
@@ -333,10 +348,10 @@ export default function StocktakePage() {
                     </span>
                   ),
                 },
-                { title: '账面', dataIndex: 'systemQty', width: 70, align: 'right', render: (v) => fmtQty(v) },
-                { title: '实盘', dataIndex: 'actualQty', width: 70, align: 'right', render: (v) => fmtQty(v) },
+                { title: t('账面', 'Book qty'), dataIndex: 'systemQty', width: 70, align: 'right', render: (v) => fmtQty(v) },
+                { title: t('实盘', 'Counted'), dataIndex: 'actualQty', width: 70, align: 'right', render: (v) => fmtQty(v) },
                 {
-                  title: '差异',
+                  title: t('差异', 'Difference'),
                   dataIndex: 'diff',
                   width: 80,
                   align: 'right',
@@ -350,11 +365,11 @@ export default function StocktakePage() {
             />
             <div style={{ marginTop: 16, display: 'flex', gap: 24, fontSize: 14 }}>
               <span>
-                <span style={{ color: T.secondary }}>盘盈合计 </span>
+                <span style={{ color: T.secondary }}>{t('盘盈合计 ', 'Total surplus ')}</span>
                 <b style={{ color: T.emerald }}>+{fmtQty(detail.gainQty)}</b>
               </span>
               <span>
-                <span style={{ color: T.secondary }}>盘亏合计 </span>
+                <span style={{ color: T.secondary }}>{t('盘亏合计 ', 'Total shortage ')}</span>
                 <b style={{ color: T.error }}>-{fmtQty(detail.lossQty)}</b>
               </span>
             </div>
@@ -364,29 +379,29 @@ export default function StocktakePage() {
 
       {/* 新建盘点 Modal */}
       <Modal
-        title="新建盘点"
+        title={t('新建盘点', 'New stocktake')}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={submit}
         confirmLoading={submitBusy}
-        okText="提交盘点"
+        okText={t('提交盘点', 'Submit stocktake')}
         okButtonProps={{ disabled: sheet.length === 0 }}
         width={760}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-          <span style={{ fontSize: 13, color: T.secondary }}>盘点范围</span>
+          <span style={{ fontSize: 13, color: T.secondary }}>{t('盘点范围', 'Scope')}</span>
           <Select
             value={scopeType}
             onChange={onScopeChange}
             style={{ width: 200 }}
             options={[
-              { value: 'all' as const, label: '全部商品' },
-              ...types.map((t) => ({ value: t.id, label: t.name })),
+              { value: 'all' as const, label: t('全部商品', 'All products') },
+              ...types.map((pt) => ({ value: pt.id, label: pt.name })),
             ]}
           />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            共 {sheet.length} 个规格
-            {changedCount > 0 ? ` · ${changedCount} 项有差异` : ''}
+            {t(`共 ${sheet.length} 个规格`, `${sheet.length} SKUs`)}
+            {changedCount > 0 ? t(` · ${changedCount} 项有差异`, ` · ${changedCount} with differences`) : ''}
           </Typography.Text>
         </div>
 
@@ -397,10 +412,10 @@ export default function StocktakePage() {
           dataSource={sheet}
           pagination={false}
           scroll={{ y: 380 }}
-          locale={{ emptyText: <Empty description="该范围没有可盘点的规格" /> }}
+          locale={{ emptyText: <Empty description={t('该范围没有可盘点的规格', 'No SKUs to count in this scope')} /> }}
           columns={[
             {
-              title: '商品',
+              title: t('商品', 'Product'),
               render: (_, r) => (
                 <span>
                   {r.productName}
@@ -409,7 +424,7 @@ export default function StocktakePage() {
               ),
             },
             {
-              title: '账面库存',
+              title: t('账面库存', 'Book qty'),
               dataIndex: 'systemQty',
               width: 110,
               align: 'right',
@@ -420,7 +435,7 @@ export default function StocktakePage() {
               ),
             },
             {
-              title: '实盘数',
+              title: t('实盘数', 'Counted qty'),
               width: 130,
               render: (_, r) => (
                 <InputNumber
@@ -433,7 +448,7 @@ export default function StocktakePage() {
               ),
             },
             {
-              title: '差异',
+              title: t('差异', 'Difference'),
               width: 90,
               align: 'right',
               render: (_, r) => {
@@ -460,7 +475,7 @@ export default function StocktakePage() {
           <Input.TextArea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="备注（选填）：本次盘点的说明"
+            placeholder={t('备注（选填）：本次盘点的说明', 'Notes (optional): what this stocktake covers')}
             autoSize={{ minRows: 2, maxRows: 4 }}
           />
         </div>

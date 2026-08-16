@@ -1,5 +1,6 @@
 import { CaretDownOutlined, CaretUpOutlined } from '@ant-design/icons'
 import { T, cardStyle } from '../theme'
+import { t } from '../lib/i18n'
 import SpotlightCard from './SpotlightCard'
 import Sparkline from './Sparkline'
 
@@ -12,7 +13,7 @@ export default function StatCard({
   value,
   icon,
   trend,
-  trendLabel = '较前一日',
+  trendLabel = t('较前一日', 'vs. previous day'),
   alert,
   note,
   spark,
@@ -90,7 +91,7 @@ export default function StatCard({
             {trend !== null && trend !== undefined && (
               <>
                 {flat ? (
-                  '持平'
+                  t('持平', 'Flat')
                 ) : (
                   <>
                     {up ? <CaretUpOutlined /> : <CaretDownOutlined />} {up ? '+' : ''}

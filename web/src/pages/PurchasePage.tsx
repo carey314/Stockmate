@@ -21,6 +21,7 @@ import { useSearchParams } from 'react-router-dom'
 import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
 import { fmtMoney, fmtQty, fmtTime } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 interface POItem {
@@ -62,6 +63,15 @@ interface SkuOption {
 }
 
 const ACCOUNTS = ['现金', '微信', '支付宝', '银行卡', '挂账']
+// 账户值是落库数据（后端 settlementAccount），只翻显示名，值本身不动
+const ACCOUNT_EN: Record<string, string> = {
+  现金: 'Cash',
+  微信: 'WeChat Pay',
+  支付宝: 'Alipay',
+  银行卡: 'Bank card',
+  挂账: 'On credit',
+}
+const accountLabel = (a: string) => t(a, ACCOUNT_EN[a] ?? a)
 type Filter = 'all' | 'unpaid' | 'cancelled'
 
 // 建单里的一行
@@ -217,8 +227,8 @@ export default function PurchasePage() {
     setNotes('')
   }
   const submitCreate = async () => {
-    if (lines.length === 0) return message.warning('至少加一件商品')
-    if (lines.some((l) => l.quantity <= 0)) return message.warning('数量要大于 0')
+    if (lines.length === 0) return message.warning(t('至少加一件商品', 'Add at least one product'))
+    if (lines.some((l) => l.quantity <= 0)) return message.warning(t('数量要大于 0', 'Quantity must be greater than 0'))
     setCreateBusy(true)
     try {
       await api.post('/purchase-orders', {
@@ -228,7 +238,7 @@ export default function PurchasePage() {
         settlementAccount: account,
         notes: notes.trim() || null,
       })
-      message.success('进货单已建，库存已入库')
+      message.success(t('进货单已建，库存已入库', 'Purchase order created, stock received'))
       setCreateOpen(false)
       resetCreate()
       load()
@@ -249,7 +259,7 @@ export default function PurchasePage() {
     setPayBusy(true)
     try {
       await api.post(`/purchase-orders/${detail.id}/pay`, { amount: v.amount, settlementAccount: v.account })
-      message.success('已付款')
+      message.success(t('已付款', 'Payment made'))
       setPayOpen(false)
       payForm.resetFields()
       refreshAll(detail.id)
@@ -270,11 +280,11 @@ export default function PurchasePage() {
     const items = Object.entries(retQty)
       .filter(([, q]) => q > 0)
       .map(([itemId, quantity]) => ({ itemId: Number(itemId), quantity }))
-    if (items.length === 0) return message.warning('填要退的数量')
+    if (items.length === 0) return message.warning(t('填要退的数量', 'Enter the quantity to return'))
     setRetBusy(true)
     try {
       await api.post(`/purchase-orders/${detail.id}/return`, { items, account: retAccount })
-      message.success('已退货给供应商')
+      message.success(t('已退货给供应商', 'Returned to supplier'))
       setRetOpen(false)
       setRetQty({})
       refreshAll(detail.id)
@@ -289,7 +299,7 @@ export default function PurchasePage() {
     if (!detail) return
     try {
       await api.put(`/purchase-orders/${detail.id}/cancel`)
-      message.success('进货单已作废，库存已扣回')
+      message.success(t('进货单已作废，库存已扣回', 'Purchase order voided, stock deducted'))
       refreshAll(detail.id)
     } catch (e) {
       message.error((e as Error).message)
@@ -297,25 +307,30 @@ export default function PurchasePage() {
   }
 
   const columns: ColumnsType<PORow> = [
-    { title: '单号', dataIndex: 'orderNo', render: (v) => <span style={{ fontFamily: 'monospace' }}>{v}</span> },
-    { title: '供应商', render: (_, o) => o.supplier?.name ?? '无供应商' },
-    { title: '进货额', dataIndex: 'actualAmount', width: 100, render: (v) => fmtMoney(v) },
+    { title: t('单号', 'Order No.'), dataIndex: 'orderNo', render: (v) => <span style={{ fontFamily: 'monospace' }}>{v}</span> },
+    { title: t('供应商', 'Supplier'), render: (_, o) => o.supplier?.name ?? t('无供应商', 'No supplier') },
+    { title: t('进货额', 'Purchase amount'), dataIndex: 'actualAmount', width: 100, render: (v) => fmtMoney(v) },
     {
-      title: '欠供应商',
+      title: t('欠供应商', 'Payable'),
       dataIndex: 'unpaidAmount',
       width: 110,
-      render: (v: number) => (v > 0 ? <b style={{ color: T.error }}>{fmtMoney(v)}</b> : <span style={{ color: T.emerald }}>已付清</span>),
+      render: (v: number) => (v > 0 ? <b style={{ color: T.error }}>{fmtMoney(v)}</b> : <span style={{ color: T.emerald }}>{t('已付清', 'Paid in full')}</span>),
     },
-    { title: '状态', dataIndex: 'status', width: 80, render: (s) => (s === 'cancelled' ? <Tag>已作废</Tag> : <Tag color="green">已完成</Tag>) },
-    { title: '时间', dataIndex: 'createdAt', width: 130, render: (v) => fmtTime(v) },
     {
-      title: '操作',
+      title: t('状态', 'Status'),
+      dataIndex: 'status',
+      width: 80,
+      render: (s) => (s === 'cancelled' ? <Tag>{t('已作废', 'Voided')}</Tag> : <Tag color="green">{t('已完成', 'Completed')}</Tag>),
+    },
+    { title: t('时间', 'Time'), dataIndex: 'createdAt', width: 130, render: (v) => fmtTime(v) },
+    {
+      title: t('操作', 'Actions'),
       key: 'ops',
       width: 90,
       fixed: 'right',
       render: (_, o) => (
         <Button size="small" type="link" onClick={() => openDetail(o.id)}>
-          详情
+          {t('详情', 'Details')}
         </Button>
       ),
     },
@@ -327,7 +342,7 @@ export default function PurchasePage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 6 }}>
-          {([['all', '全部'], ['unpaid', '欠供应商'], ['cancelled', '已作废']] as [Filter, string][]).map(([k, label]) => (
+          {([['all', t('全部', 'All')], ['unpaid', t('欠供应商', 'Payable')], ['cancelled', t('已作废', 'Voided')]] as [Filter, string][]).map(([k, label]) => (
             <span
               key={k}
               onClick={() => {
@@ -357,7 +372,7 @@ export default function PurchasePage() {
           }}
         />
         <Input.Search
-          placeholder="搜单号 / 供应商"
+          placeholder={t('搜单号 / 供应商', 'Search order no. / supplier')}
           allowClear
           defaultValue={kw}
           onSearch={(v) => {
@@ -367,7 +382,7 @@ export default function PurchasePage() {
           style={{ width: 200 }}
         />
         <Button type="primary" icon={<PlusOutlined />} style={{ marginLeft: 'auto' }} onClick={() => setCreateOpen(true)}>
-          新建进货单
+          {t('新建进货单', 'New purchase order')}
         </Button>
       </div>
 
@@ -378,14 +393,18 @@ export default function PurchasePage() {
           dataSource={rows}
           loading={loading}
           size="middle"
-          locale={{ emptyText: <Empty description="还没有进货单，新建一个把进的货录进来" /> }}
+          locale={{
+            emptyText: (
+              <Empty description={t('还没有进货单，新建一个把进的货录进来', 'No purchase orders yet — create one to record the goods you bought')} />
+            ),
+          }}
           onRow={(o) => ({ onClick: () => openDetail(o.id), style: { cursor: 'pointer' } })}
           pagination={{
             current: page,
             pageSize,
             total,
             showSizeChanger: true,
-            showTotal: (t) => `共 ${t} 单`,
+            showTotal: (n) => t(`共 ${n} 单`, `${n} orders`),
             onChange: (p, ps) => {
               setPage(p)
               setPageSize(ps)
@@ -397,19 +416,19 @@ export default function PurchasePage() {
 
       {/* 建单 */}
       <Modal
-        title="新建进货单"
+        title={t('新建进货单', 'New purchase order')}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={submitCreate}
         confirmLoading={createBusy}
-        okText="确认进货（自动入库）"
+        okText={t('确认进货（自动入库）', 'Confirm purchase (auto stock-in)')}
         width={720}
       >
         <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
           <Select
             allowClear
             showSearch
-            placeholder="选供应商（可不选）"
+            placeholder={t('选供应商（可不选）', 'Select supplier (optional)')}
             value={supplierId}
             onChange={(v) => setSupplierId(v ?? null)}
             optionFilterProp="label"
@@ -418,7 +437,7 @@ export default function PurchasePage() {
           />
           <Select<number>
             showSearch
-            placeholder="加商品：搜名称/规格"
+            placeholder={t('加商品：搜名称/规格', 'Add product: search by name / spec')}
             value={null}
             onChange={(v) => v != null && addLine(v)}
             optionFilterProp="label"
@@ -427,7 +446,10 @@ export default function PurchasePage() {
           />
         </div>
         {lines.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="上面搜商品加进来，填数量和进价" />
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={t('上面搜商品加进来，填数量和进价', 'Search above to add products, then fill in quantity and cost')}
+          />
         ) : (
           <Table<Line>
             rowKey="skuId"
@@ -435,32 +457,32 @@ export default function PurchasePage() {
             dataSource={lines}
             pagination={false}
             columns={[
-              { title: '商品', dataIndex: 'name' },
+              { title: t('商品', 'Product'), dataIndex: 'name' },
               {
-                title: '进价',
+                title: t('进价', 'Cost'),
                 width: 110,
                 render: (_, l) => (
                   <InputNumber size="small" prefix="¥" min={0} precision={2} value={l.unitPrice} onChange={(v) => patchLine(l.skuId, { unitPrice: v ?? 0 })} style={{ width: 96 }} />
                 ),
               },
               {
-                title: '数量',
+                title: t('数量', 'Qty'),
                 width: 100,
                 render: (_, l) => (
                   <InputNumber size="small" min={0} value={l.quantity} onChange={(v) => patchLine(l.skuId, { quantity: v ?? 0 })} style={{ width: 88 }} />
                 ),
               },
-              { title: '小计', width: 90, render: (_, l) => fmtMoney(l.quantity * l.unitPrice) },
+              { title: t('小计', 'Subtotal'), width: 90, render: (_, l) => fmtMoney(l.quantity * l.unitPrice) },
               { title: '', width: 40, render: (_, l) => <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => removeLine(l.skuId)} /> },
             ]}
           />
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 24, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <span>
-            合计 <b style={{ fontSize: 16 }}>{fmtMoney(linesTotal)}</b>
+            {t('合计 ', 'Total ')}<b style={{ fontSize: 16 }}>{fmtMoney(linesTotal)}</b>
           </span>
           <span>
-            已付
+            {t('已付', 'Paid')}
             <InputNumber
               size="small"
               prefix="¥"
@@ -473,29 +495,42 @@ export default function PurchasePage() {
               style={{ width: 110, marginLeft: 6 }}
             />
           </span>
-          <Select size="small" value={account} onChange={setAccount} options={ACCOUNTS.map((a) => ({ value: a, label: a }))} style={{ width: 100 }} />
+          <Select size="small" value={account} onChange={setAccount} options={ACCOUNTS.map((a) => ({ value: a, label: accountLabel(a) }))} style={{ width: 100 }} />
         </div>
         {paid !== null && paid < linesTotal && (
           <div style={{ textAlign: 'right', marginTop: 6, fontSize: 12, color: T.error }}>
-            欠供应商 {fmtMoney(linesTotal - paid)}
+            {t(`欠供应商 ${fmtMoney(linesTotal - paid)}`, `Payable ${fmtMoney(linesTotal - paid)}`)}
           </div>
         )}
-        <Input.TextArea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="备注（选填）" autoSize={{ minRows: 1, maxRows: 2 }} style={{ marginTop: 10 }} maxLength={200} />
+        <Input.TextArea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder={t('备注（选填）', 'Notes (optional)')}
+          autoSize={{ minRows: 1, maxRows: 2 }}
+          style={{ marginTop: 10 }}
+          maxLength={200}
+        />
       </Modal>
 
       {/* 详情 */}
-      <Drawer open={!!detail || detailLoading} onClose={() => setDetail(null)} size="large" title={detail ? `进货单 ${detail.orderNo}` : '加载中'} className="print-area">
+      <Drawer
+        open={!!detail || detailLoading}
+        onClose={() => setDetail(null)}
+        size="large"
+        title={detail ? t(`进货单 ${detail.orderNo}`, `Purchase order ${detail.orderNo}`) : t('加载中', 'Loading')}
+        className="print-area"
+      >
         {detail && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
               <span>
-                供应商：<b>{detail.supplier?.name ?? '无供应商'}</b>
+                {t('供应商：', 'Supplier: ')}<b>{detail.supplier?.name ?? t('无供应商', 'No supplier')}</b>
               </span>
               <span style={{ color: T.secondary }}>
                 {dayjs(detail.createdAt).format('YYYY-MM-DD HH:mm')} · {detail.operator?.realName ?? ''}
               </span>
             </div>
-            {detail.status === 'cancelled' && <Tag style={{ marginBottom: 12 }}>此单已作废</Tag>}
+            {detail.status === 'cancelled' && <Tag style={{ marginBottom: 12 }}>{t('此单已作废', 'This order has been voided')}</Tag>}
             <Table<POItem>
               rowKey="id"
               size="small"
@@ -503,38 +538,45 @@ export default function PurchasePage() {
               pagination={false}
               columns={[
                 {
-                  title: '商品',
+                  title: t('商品', 'Product'),
                   render: (_, it) => (
                     <span>
                       {it.productName}
                       {it.specText ? <span style={{ color: T.secondary }}>（{it.specText}）</span> : ''}
-                      {it.returnedQty > 0 && <Tag color="orange" style={{ marginLeft: 6 }}>已退{fmtQty(it.returnedQty)}</Tag>}
+                      {it.returnedQty > 0 && (
+                        <Tag color="orange" style={{ marginLeft: 6 }}>
+                          {t(`已退${fmtQty(it.returnedQty)}`, `Returned ${fmtQty(it.returnedQty)}`)}
+                        </Tag>
+                      )}
                     </span>
                   ),
                 },
-                { title: '进价', dataIndex: 'unitPrice', width: 72, render: (v) => fmtMoney(v) },
-                { title: '数量', dataIndex: 'quantity', width: 56, render: (v) => fmtQty(v) },
-                { title: '小计', dataIndex: 'subtotal', width: 80, render: (v) => fmtMoney(v) },
+                { title: t('进价', 'Cost'), dataIndex: 'unitPrice', width: 72, render: (v) => fmtMoney(v) },
+                { title: t('数量', 'Qty'), dataIndex: 'quantity', width: 56, render: (v) => fmtQty(v) },
+                { title: t('小计', 'Subtotal'), dataIndex: 'subtotal', width: 80, render: (v) => fmtMoney(v) },
               ]}
             />
             <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14 }}>
-              <PORowLine label="原价合计" value={fmtMoney(detail.totalAmount)} />
-              {detail.discountAmount > 0 && <PORowLine label="折扣" value={`- ${fmtMoney(detail.discountAmount)}`} />}
-              <PORowLine label="进货额" value={fmtMoney(detail.actualAmount)} bold />
-              <PORowLine label="已付" value={fmtMoney(detail.paidAmount)} />
-              {detail.unpaidAmount > 0 && <PORowLine label="欠供应商" value={fmtMoney(detail.unpaidAmount)} danger bold />}
-              {detail.settlementAccount && <PORowLine label="结算" value={detail.settlementAccount} />}
+              <PORowLine label={t('原价合计', 'Subtotal before discount')} value={fmtMoney(detail.totalAmount)} />
+              {detail.discountAmount > 0 && <PORowLine label={t('折扣', 'Discount')} value={`- ${fmtMoney(detail.discountAmount)}`} />}
+              <PORowLine label={t('进货额', 'Purchase amount')} value={fmtMoney(detail.actualAmount)} bold />
+              <PORowLine label={t('已付', 'Paid')} value={fmtMoney(detail.paidAmount)} />
+              {detail.unpaidAmount > 0 && <PORowLine label={t('欠供应商', 'Payable')} value={fmtMoney(detail.unpaidAmount)} danger bold />}
+              {detail.settlementAccount && <PORowLine label={t('结算', 'Settlement account')} value={accountLabel(detail.settlementAccount)} />}
             </div>
             {detail.status === 'completed' && (
               <div className="no-print" style={{ marginTop: 20, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {detail.unpaidAmount > 0 && (
                   <Button type="primary" onClick={() => { payForm.setFieldsValue({ amount: detail.unpaidAmount, account: '现金' }); setPayOpen(true) }}>
-                    付款
+                    {t('付款', 'Pay')}
                   </Button>
                 )}
-                {canReturn && <Button onClick={() => { setRetQty({}); setRetOpen(true) }}>退货给供应商</Button>}
-                <Popconfirm title="作废这单？库存会扣回、应付一并冲销" onConfirm={doCancel}>
-                  <Button danger>作废</Button>
+                {canReturn && <Button onClick={() => { setRetQty({}); setRetOpen(true) }}>{t('退货给供应商', 'Return to supplier')}</Button>}
+                <Popconfirm
+                  title={t('作废这单？库存会扣回、应付一并冲销', 'Void this order? Stock will be deducted and the payable written off')}
+                  onConfirm={doCancel}
+                >
+                  <Button danger>{t('作废', 'Void')}</Button>
                 </Popconfirm>
               </div>
             )}
@@ -543,24 +585,45 @@ export default function PurchasePage() {
       </Drawer>
 
       {/* 付款 */}
-      <Modal title="付货款" open={payOpen} onCancel={() => setPayOpen(false)} onOk={doPay} confirmLoading={payBusy} okText="确认付款">
+      <Modal
+        title={t('付货款', 'Pay balance')}
+        open={payOpen}
+        onCancel={() => setPayOpen(false)}
+        onOk={doPay}
+        confirmLoading={payBusy}
+        okText={t('确认付款', 'Confirm payment')}
+      >
         <Form form={payForm} layout="vertical">
-          <Form.Item name="amount" label="付款金额" rules={[{ required: true, message: '填金额' }]}>
+          <Form.Item name="amount" label={t('付款金额', 'Payment amount')} rules={[{ required: true, message: t('填金额', 'Enter an amount') }]}>
             <InputNumber style={{ width: '100%' }} prefix="¥" min={0.01} precision={2} max={detail?.unpaidAmount} />
           </Form.Item>
-          <Form.Item name="account" label="付款方式">
-            <Select options={ACCOUNTS.filter((a) => a !== '挂账').map((a) => ({ value: a, label: a }))} />
+          <Form.Item name="account" label={t('付款方式', 'Payment method')}>
+            <Select options={ACCOUNTS.filter((a) => a !== '挂账').map((a) => ({ value: a, label: accountLabel(a) }))} />
           </Form.Item>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            当前欠供应商 {detail ? fmtMoney(detail.unpaidAmount) : ''}，可分次付
+            {t(
+              `当前欠供应商 ${detail ? fmtMoney(detail.unpaidAmount) : ''}，可分次付`,
+              `Payable ${detail ? fmtMoney(detail.unpaidAmount) : ''} — can be paid in instalments`,
+            )}
           </Typography.Text>
         </Form>
       </Modal>
 
       {/* 退货 */}
-      <Modal title="退货给供应商" open={retOpen} onCancel={() => setRetOpen(false)} onOk={doReturn} confirmLoading={retBusy} okText="确认退货" width={520}>
+      <Modal
+        title={t('退货给供应商', 'Return to supplier')}
+        open={retOpen}
+        onCancel={() => setRetOpen(false)}
+        onOk={doReturn}
+        confirmLoading={retBusy}
+        okText={t('确认退货', 'Confirm return')}
+        width={520}
+      >
         <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-          填每个商品要退的数量（不超过可退数）。退货会扣回库存、冲减应付。
+          {t(
+            '填每个商品要退的数量（不超过可退数）。退货会扣回库存、冲减应付。',
+            'Enter the quantity to return for each product (no more than the returnable amount). Returns deduct stock and offset the payable.',
+          )}
         </Typography.Paragraph>
         {detail?.items.map((it) => {
           const returnable = it.quantity - it.returnedQty
@@ -569,15 +632,15 @@ export default function PurchasePage() {
               <span style={{ flex: 1, fontSize: 13 }}>
                 {it.productName}
                 {it.specText ? `（${it.specText}）` : ''}
-                <span style={{ color: T.secondary }}> 可退 {fmtQty(returnable)}</span>
+                <span style={{ color: T.secondary }}>{t(` 可退 ${fmtQty(returnable)}`, ` ${fmtQty(returnable)} returnable`)}</span>
               </span>
               <InputNumber size="small" min={0} max={returnable} disabled={returnable <= 0} value={retQty[it.id] ?? 0} onChange={(v) => setRetQty((p) => ({ ...p, [it.id]: v ?? 0 }))} style={{ width: 90 }} />
             </div>
           )
         })}
         <div style={{ marginTop: 12 }}>
-          退款方式：
-          <Select size="small" value={retAccount} onChange={setRetAccount} options={ACCOUNTS.filter((a) => a !== '挂账').map((a) => ({ value: a, label: a }))} style={{ width: 120, marginLeft: 8 }} />
+          {t('退款方式：', 'Refund method: ')}
+          <Select size="small" value={retAccount} onChange={setRetAccount} options={ACCOUNTS.filter((a) => a !== '挂账').map((a) => ({ value: a, label: accountLabel(a) }))} style={{ width: 120, marginLeft: 8 }} />
         </div>
       </Modal>
     </div>

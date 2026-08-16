@@ -12,7 +12,11 @@ interface Msg {
 }
 
 const STORE_KEY = 'sm_ai_chat' // sessionStorage 镜像：窄屏 Drawer 卸载重挂时聊天不丢
-const QUICK = ['今天卖了多少', '谁欠我钱', '什么货该补了']
+const QUICK = [
+  t('今天卖了多少', 'How much did I sell today'),
+  t('谁欠我钱', 'Who owes me money'),
+  t('什么货该补了', 'What needs restocking'),
+]
 
 function loadMsgs(): Msg[] {
   try {
@@ -54,7 +58,7 @@ export default function AiChatPanel() {
     } catch (e) {
       const raw = (e as Error).message
       const friendly = raw.includes('timeout')
-        ? 'AI 想久了没回来，网络可能不稳'
+        ? t('AI 想久了没回来，网络可能不稳', 'AI took too long to answer — the network may be unstable')
         : raw
       setMsgs((p) => [...p.slice(0, -1), { role: 'assistant', content: friendly, status: 'error' }])
     } finally {
@@ -83,7 +87,7 @@ export default function AiChatPanel() {
             size="small"
             type="text"
             icon={<ClearOutlined />}
-            title="清空对话"
+            title={t('清空对话', 'Clear conversation')}
             onClick={() => setMsgs([])}
           />
         )}
@@ -92,7 +96,10 @@ export default function AiChatPanel() {
         {msgs.length === 0 ? (
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>
-              基于你店里的真实经营数据回答，答不了会诚实说。试试：
+              {t(
+                '基于你店里的真实经营数据回答，答不了会诚实说。试试：',
+                'Answers come from your real store data, and it will say so when it cannot answer. Try:',
+              )}
             </Typography.Text>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               {QUICK.map((q) => (
@@ -163,7 +170,7 @@ export default function AiChatPanel() {
                           style={{ marginTop: 6 }}
                           onClick={() => send(lastQuestion.current)}
                         >
-                          重试
+                          {t('重试', 'Retry')}
                         </Button>
                       </div>
                     )}
@@ -188,7 +195,7 @@ export default function AiChatPanel() {
         >
           {/* 原生 input：antd Input 的 borderless 在 focus 时仍有蓝边框会裁掉首字，换原生彻底干净 */}
           <input
-            placeholder="问问你的生意…"
+            placeholder={t('问问你的生意…', 'Ask about your business…')}
             value={input}
             disabled={busy}
             onChange={(e) => setInput(e.target.value)}

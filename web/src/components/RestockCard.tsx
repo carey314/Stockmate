@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import api from '../api/client'
 import { fmtQty } from '../lib/format'
 import { T, cardStyle } from '../theme'
+import { t } from '../lib/i18n'
 
 interface AlertRow {
   id: number
@@ -31,10 +32,13 @@ export default function RestockCard() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <WarningOutlined style={{ color: T.error, fontSize: 18 }} />
         <Typography.Text strong style={{ fontSize: 17 }}>
-          该补货了
+          {t('该补货了', 'Time to restock')}
         </Typography.Text>
         <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>
-          {rows.length} 个规格低于预警线（去 App 一键开进货单）
+          {t(
+            `${rows.length} 个规格低于预警线（去 App 一键开进货单）`,
+            `${rows.length} SKUs below the alert level (create a purchase order in the app)`,
+          )}
         </Typography.Text>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>

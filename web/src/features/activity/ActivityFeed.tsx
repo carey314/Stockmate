@@ -46,7 +46,9 @@ function buildFeed(records: InvRecord[], orders: OrderRow[]): FeedItem[] {
   const items: FeedItem[] = []
   // 同一笔销售在两个接口各有一条：丢弃 relatedOrderId 的库存流水，保留信息更全的订单条目
   for (const r of records.filter((r) => !r.relatedOrderId)) {
-    const name = `${r.product?.name ?? '未知商品'}${r.sku?.specText ? `（${r.sku.specText}）` : ''}`
+    const name = `${r.product?.name ?? t('未知商品', 'Unknown product')}${
+      r.sku?.specText ? `（${r.sku.specText}）` : ''
+    }`
     const delta = r.afterQuantity - r.beforeQuantity
     const sign = delta >= 0 ? '+' : '-'
     const isLoss = r.type === 'outbound' && LOSS_WORDS.some((w) => (r.reason ?? '').includes(w))
@@ -75,10 +77,18 @@ function buildFeed(records: InvRecord[], orders: OrderRow[]): FeedItem[] {
       dot: owed ? T.error : T.primary,
       node: (
         <>
-          {o.customer?.name ?? '散客'} 开单 <span style={{ color: T.primary }}>{o.orderNo}</span>{' '}
+          {o.customer?.name ?? t('散客', 'Walk-in')}
+          {t(' 开单 ', ' order ')}
+          <span style={{ color: T.primary }}>{o.orderNo}</span>{' '}
           <b>{fmtMoney(o.actualAmount)}</b>
-          <span style={{ color: T.secondary }}>（{o._count.items} 项）</span>
-          {owed && <b style={{ color: T.error }}> 欠 {fmtMoney(o.unpaidAmount)}</b>}
+          <span style={{ color: T.secondary }}>
+            {t(`（${o._count.items} 项）`, ` (${o._count.items} items)`)}
+          </span>
+          {owed && (
+            <b style={{ color: T.error }}>
+              {t(` 欠 ${fmtMoney(o.unpaidAmount)}`, ` owes ${fmtMoney(o.unpaidAmount)}`)}
+            </b>
+          )}
         </>
       ),
     })
@@ -137,13 +147,16 @@ export default function ActivityFeed() {
             <Typography.Text type="secondary">{error}</Typography.Text>
             <br />
             <Button size="small" style={{ marginTop: 8 }} onClick={load}>
-              重试
+              {t('重试', 'Retry')}
             </Button>
           </div>
         ) : !feed ? (
           <Skeleton active paragraph={{ rows: 6 }} />
         ) : feed.length === 0 ? (
-          <Empty description="还没有动态，去 App 上开第一单" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <Empty
+            description={t('还没有动态，去 App 上开第一单', 'Nothing yet — create your first order in the app')}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
         ) : (
           feed.map((it, i) => (
             <div

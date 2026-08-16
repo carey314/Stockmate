@@ -18,6 +18,7 @@ import { useSearchParams } from 'react-router-dom'
 import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
 import { fmtMoney } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 type Mode = 'income' | 'expense'
@@ -46,10 +47,10 @@ interface ListResp<T> {
 }
 
 const PRESETS: { label: string; range: () => [Dayjs, Dayjs] }[] = [
-  { label: '今天', range: () => [dayjs(), dayjs()] },
-  { label: '近7天', range: () => [dayjs().subtract(6, 'day'), dayjs()] },
-  { label: '近30天', range: () => [dayjs().subtract(29, 'day'), dayjs()] },
-  { label: '本月', range: () => [dayjs().startOf('month'), dayjs()] },
+  { label: t('今天', 'Today'), range: () => [dayjs(), dayjs()] },
+  { label: t('近7天', 'Last 7 days'), range: () => [dayjs().subtract(6, 'day'), dayjs()] },
+  { label: t('近30天', 'Last 30 days'), range: () => [dayjs().subtract(29, 'day'), dayjs()] },
+  { label: t('本月', 'This month'), range: () => [dayjs().startOf('month'), dayjs()] },
 ]
 
 const INCOME_QUICK = ['日结营业额', '其他收入']
@@ -136,7 +137,7 @@ export default function LedgerPage() {
           expenseDate: date ? date.format('YYYY-MM-DD') : undefined,
         })
       }
-      message.success('已记一笔')
+      message.success(t('已记一笔', 'Entry saved'))
       setOpen(false)
       load()
     } catch (e) {
@@ -149,7 +150,7 @@ export default function LedgerPage() {
   const remove = async (e: Entry) => {
     try {
       await api.delete(`${isInc ? '/incomes' : '/expenses'}/${e.id}`)
-      message.success('已删除')
+      message.success(t('已删除', 'Deleted'))
       load()
     } catch (err) {
       message.error((err as Error).message)
@@ -158,35 +159,39 @@ export default function LedgerPage() {
 
   const columns: ColumnsType<Entry> = [
     {
-      title: isInc ? '来源' : '类别',
+      title: isInc ? t('来源', 'Source') : t('类别', 'Category'),
       key: 'name',
       render: (_, r) => <span style={{ fontWeight: 600 }}>{isIncome(r) ? r.source : r.category}</span>,
     },
     {
-      title: '金额',
+      title: t('金额', 'Amount'),
       dataIndex: 'amount',
       width: 130,
       render: (v: number) => <b style={{ color: accent }}>{fmtMoney(v)}</b>,
     },
     {
-      title: '备注',
+      title: t('备注', 'Note'),
       dataIndex: 'note',
       ellipsis: true,
       render: (v: string | null) => v || <span style={{ color: T.secondary }}>-</span>,
     },
     {
-      title: '日期',
+      title: t('日期', 'Date'),
       key: 'date',
       width: 130,
       render: (_, r) => dayjs(isIncome(r) ? r.incomeDate : r.expenseDate).format('YYYY-MM-DD'),
     },
     {
-      title: '操作',
+      title: t('操作', 'Actions'),
       key: 'ops',
       width: 80,
       fixed: 'right',
       render: (_, r) => (
-        <Popconfirm title="删除这笔记录？" description="删除后不可恢复" onConfirm={() => remove(r)}>
+        <Popconfirm
+          title={t('删除这笔记录？', 'Delete this record?')}
+          description={t('删除后不可恢复', 'This cannot be undone')}
+          onConfirm={() => remove(r)}
+        >
           <Button size="small" type="text" danger icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -215,7 +220,7 @@ export default function LedgerPage() {
                 border: mode === m ? `1px solid ${T.primary}33` : '1px solid transparent',
               }}
             >
-              {m === 'income' ? '收入' : '支出'}
+              {m === 'income' ? t('收入', 'Income') : t('支出', 'Expense')}
             </span>
           ))}
         </div>
@@ -250,7 +255,7 @@ export default function LedgerPage() {
           />
         </div>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          记一笔
+          {t('记一笔', 'Add entry')}
         </Button>
       </div>
 
@@ -266,9 +271,11 @@ export default function LedgerPage() {
         }}
       >
         <Typography.Text>
-          {isInc ? '这段时间收入合计 ' : '这段时间支出合计 '}
+          {isInc
+            ? t('这段时间收入合计 ', 'Income total for this period ')
+            : t('这段时间支出合计 ', 'Expense total for this period ')}
           <b style={{ color: accent }}>{fmtMoney(sum)}</b>
-          <span style={{ color: T.secondary }}>（{total} 笔）</span>
+          <span style={{ color: T.secondary }}>{t(`（${total} 笔）`, ` (${total} entries)`)}</span>
         </Typography.Text>
       </div>
 
@@ -280,30 +287,47 @@ export default function LedgerPage() {
           dataSource={rows}
           loading={loading}
           size="middle"
-          locale={{ emptyText: <Empty description={`这段时间还没有${isInc ? '收入' : '支出'}记录`} /> }}
-          pagination={{ pageSize: 15, showTotal: (t) => `共 ${t} 笔` }}
+          locale={{
+            emptyText: (
+              <Empty
+                description={t(
+                  `这段时间还没有${isInc ? '收入' : '支出'}记录`,
+                  `No ${isInc ? 'income' : 'expense'} records in this period`,
+                )}
+              />
+            ),
+          }}
+          pagination={{ pageSize: 15, showTotal: (n) => t(`共 ${n} 笔`, `${n} entries in total`) }}
           scroll={{ x: 620 }}
         />
       </div>
 
       {/* 记一笔 Modal */}
       <Modal
-        title={isInc ? '记一笔收入' : '记一笔支出'}
+        title={isInc ? t('记一笔收入', 'Add income entry') : t('记一笔支出', 'Add expense entry')}
         open={open}
         onCancel={() => setOpen(false)}
         onOk={submit}
         confirmLoading={busy}
-        okText="保存"
+        okText={t('保存', 'Save')}
         destroyOnHidden
         forceRender
       >
         <Form form={form} layout="vertical">
           <Form.Item
             name="name"
-            label={isInc ? '来源' : '类别'}
-            rules={[{ required: true, message: isInc ? '填写来源' : '填写类别' }]}
+            label={isInc ? t('来源', 'Source') : t('类别', 'Category')}
+            rules={[
+              {
+                required: true,
+                message: isInc ? t('填写来源', 'Enter a source') : t('填写类别', 'Enter a category'),
+              },
+            ]}
           >
-            <Input placeholder={isInc ? '如：日结营业额' : '如：房租'} maxLength={40} />
+            <Input
+              placeholder={isInc ? t('如：日结营业额', 'e.g. Daily revenue') : t('如：房租', 'e.g. Rent')}
+              maxLength={40}
+            />
           </Form.Item>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '-8px 0 12px' }}>
             {quick.map((q) => (
@@ -324,7 +348,11 @@ export default function LedgerPage() {
             ))}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Form.Item name="amount" label="金额" rules={[{ required: true, message: '填写金额' }]}>
+            <Form.Item
+              name="amount"
+              label={t('金额', 'Amount')}
+              rules={[{ required: true, message: t('填写金额', 'Enter an amount') }]}
+            >
               <InputNumber
                 min={0.01}
                 precision={2}
@@ -333,12 +361,16 @@ export default function LedgerPage() {
                 style={{ width: '100%' }}
               />
             </Form.Item>
-            <Form.Item name="date" label="日期" rules={[{ required: true, message: '选择日期' }]}>
+            <Form.Item
+              name="date"
+              label={t('日期', 'Date')}
+              rules={[{ required: true, message: t('选择日期', 'Pick a date') }]}
+            >
               <DatePicker style={{ width: '100%' }} allowClear={false} />
             </Form.Item>
           </div>
-          <Form.Item name="note" label="备注">
-            <Input.TextArea rows={2} maxLength={200} placeholder="选填" />
+          <Form.Item name="note" label={t('备注', 'Note')}>
+            <Input.TextArea rows={2} maxLength={200} placeholder={t('选填', 'Optional')} />
           </Form.Item>
         </Form>
       </Modal>

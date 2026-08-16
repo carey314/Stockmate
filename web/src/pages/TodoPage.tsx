@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../auth'
 import { fmtMoney, fmtQty } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 interface Overview {
@@ -117,16 +118,23 @@ export default function TodoPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-        {profile?.shopName || '你的店'} 今天要处理的事，都聚在这
+        {profile?.shopName || t('你的店', 'Your store')}
+        {t(' 今天要处理的事，都聚在这', ' — everything that needs your attention today, in one place')}
       </Typography.Text>
 
       {/* 今日小结 */}
-      <Card icon={<RiseOutlined />} title="今日小结">
+      <Card icon={<RiseOutlined />} title={t('今日小结', "Today's summary")}>
         {ov ? (
           <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
-            <Stat icon={<AccountBookOutlined />} label="今日销售额" value={fmtMoney(ov.todaySales)} />
-            <Stat icon={<ShoppingOutlined />} label="今日订单" value={String(ov.todayOrderCount)} />
-            {isAdmin && <Stat icon={<RiseOutlined />} label={ov.profitUnreliable ? '今日毛利*' : '今日毛利'} value={fmtMoney(ov.todayProfit)} />}
+            <Stat icon={<AccountBookOutlined />} label={t('今日销售额', "Today's sales")} value={fmtMoney(ov.todaySales)} />
+            <Stat icon={<ShoppingOutlined />} label={t('今日订单', "Today's orders")} value={String(ov.todayOrderCount)} />
+            {isAdmin && (
+              <Stat
+                icon={<RiseOutlined />}
+                label={ov.profitUnreliable ? t('今日毛利*', "Today's gross profit*") : t('今日毛利', "Today's gross profit")}
+                value={fmtMoney(ov.todayProfit)}
+              />
+            )}
           </div>
         ) : (
           <Skeleton active paragraph={{ rows: 1 }} />
@@ -134,12 +142,17 @@ export default function TodoPage() {
       </Card>
 
       {/* 缺货补货 */}
-      <Card icon={<InboxOutlined />} title="该补的货" count={alerts?.length} countColor={alerts && alerts.length > 0 ? T.error : undefined}>
+      <Card
+        icon={<InboxOutlined />}
+        title={t('该补的货', 'Stock to reorder')}
+        count={alerts?.length}
+        countColor={alerts && alerts.length > 0 ? T.error : undefined}
+      >
         {alerts === null ? (
           <Skeleton active paragraph={{ rows: 2 }} />
         ) : alerts.length === 0 ? (
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            ✓ 没有低于预警线的商品
+            {t('✓ 没有低于预警线的商品', '✓ Nothing below its reorder point')}
           </Typography.Text>
         ) : (
           alerts.map((a) => (
@@ -149,11 +162,13 @@ export default function TodoPage() {
                 <>
                   <WarningOutlined style={{ color: T.error, marginRight: 6 }} />
                   {a.sku.product.name}
-                  {a.sku.specText ? `（${a.sku.specText}）` : ''} 只剩 <b style={{ color: T.error }}>{fmtQty(a.quantity)}</b>
+                  {a.sku.specText ? t(`（${a.sku.specText}）`, ` (${a.sku.specText})`) : ''}
+                  {t(' 只剩 ', ' is down to ')}
+                  <b style={{ color: T.error }}>{fmtQty(a.quantity)}</b>
                   <span style={{ color: T.secondary }}>/{fmtQty(a.minQuantity)}{a.sku.product.unit}</span>
                 </>
               }
-              action="去进货"
+              action={t('去进货', 'Purchase')}
               onClick={() => navigate('/purchase')}
             />
           ))
@@ -163,7 +178,7 @@ export default function TodoPage() {
       {/* 客户欠款 */}
       <Card
         icon={<TeamOutlined />}
-        title="谁欠我钱"
+        title={t('谁欠我钱', 'Who owes me')}
         count={owedCustomers?.length}
         countColor={owedCustomers && owedCustomers.length > 0 ? T.error : undefined}
       >
@@ -171,23 +186,27 @@ export default function TodoPage() {
           <Skeleton active paragraph={{ rows: 2 }} />
         ) : owedCustomers.length === 0 ? (
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            ✓ 没有客户欠款
+            {t('✓ 没有客户欠款', '✓ No customer owes you anything')}
           </Typography.Text>
         ) : (
           <>
             <Typography.Paragraph style={{ fontSize: 12.5, color: T.secondary, marginBottom: 8 }}>
-              共欠 <b style={{ color: T.error }}>{fmtMoney(totalCustomerOwed)}</b>，按金额从高到低：
+              {t('共欠 ', 'Outstanding total ')}
+              <b style={{ color: T.error }}>{fmtMoney(totalCustomerOwed)}</b>
+              {t('，按金额从高到低：', ', highest first:')}
             </Typography.Paragraph>
             {owedCustomers.slice(0, 8).map((c) => (
               <Row
                 key={c.id}
                 text={
                   <>
-                    {c.name} 欠 <b style={{ color: T.error }}>{fmtMoney(c.owed!)}</b>
-                    <span style={{ color: T.secondary }}>（{c.unpaidCount} 单）</span>
+                    {c.name}
+                    {t(' 欠 ', ' owes ')}
+                    <b style={{ color: T.error }}>{fmtMoney(c.owed!)}</b>
+                    <span style={{ color: T.secondary }}>{t(`（${c.unpaidCount} 单）`, ` (${c.unpaidCount} orders)`)}</span>
                   </>
                 }
-                action="打对账单"
+                action={t('打对账单', 'Statement')}
                 onClick={() => navigate('/statements')}
               />
             ))}
@@ -198,7 +217,7 @@ export default function TodoPage() {
       {/* 欠供应商 */}
       <Card
         icon={<InboxOutlined />}
-        title="我欠谁钱"
+        title={t('我欠谁钱', 'Who I owe')}
         count={owedSuppliers?.length}
         countColor={owedSuppliers && owedSuppliers.length > 0 ? T.orange : undefined}
       >
@@ -206,23 +225,27 @@ export default function TodoPage() {
           <Skeleton active paragraph={{ rows: 1 }} />
         ) : owedSuppliers.length === 0 ? (
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            ✓ 没有欠供应商货款
+            {t('✓ 没有欠供应商货款', '✓ Nothing owed to suppliers')}
           </Typography.Text>
         ) : (
           <>
             <Typography.Paragraph style={{ fontSize: 12.5, color: T.secondary, marginBottom: 8 }}>
-              共欠供应商 <b style={{ color: T.orange }}>{fmtMoney(totalSupplierOwed)}</b>：
+              {t('共欠供应商 ', 'Total payable to suppliers ')}
+              <b style={{ color: T.orange }}>{fmtMoney(totalSupplierOwed)}</b>
+              {t('：', ':')}
             </Typography.Paragraph>
             {owedSuppliers.slice(0, 8).map((s) => (
               <Row
                 key={s.id}
                 text={
                   <>
-                    {s.name} 欠 <b style={{ color: T.orange }}>{fmtMoney(s.owed!)}</b>
-                    <span style={{ color: T.secondary }}>（{s.unpaidCount} 单）</span>
+                    {s.name}
+                    {t(' 欠 ', ' is owed ')}
+                    <b style={{ color: T.orange }}>{fmtMoney(s.owed!)}</b>
+                    <span style={{ color: T.secondary }}>{t(`（${s.unpaidCount} 单）`, ` (${s.unpaidCount} bills)`)}</span>
                   </>
                 }
-                action="去付款"
+                action={t('去付款', 'Pay')}
                 onClick={() => navigate('/purchase')}
               />
             ))}
@@ -231,7 +254,7 @@ export default function TodoPage() {
       </Card>
 
       {alerts?.length === 0 && owedCustomers?.length === 0 && owedSuppliers?.length === 0 && (
-        <Empty description="太好了，没有待办事项 🎉" style={{ padding: 20 }} />
+        <Empty description={t('太好了，没有待办事项 🎉', 'All clear — nothing to handle 🎉')} style={{ padding: 20 }} />
       )}
     </div>
   )

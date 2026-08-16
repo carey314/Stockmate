@@ -21,6 +21,7 @@ import { useSearchParams } from 'react-router-dom'
 import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
 import { fmtMoney, fmtQty, fmtTime } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 interface OrderItem {
@@ -54,6 +55,14 @@ interface OrderDetail extends OrderRow {
 }
 
 const ACCOUNTS = ['现金', '微信', '支付宝', '银行卡']
+// 账户值是落库数据（后端 settlementAccount），只翻显示名，值本身不动
+const ACCOUNT_EN: Record<string, string> = {
+  现金: 'Cash',
+  微信: 'WeChat Pay',
+  支付宝: 'Alipay',
+  银行卡: 'Bank card',
+}
+const accountLabel = (a: string) => t(a, ACCOUNT_EN[a] ?? a)
 type Filter = 'all' | 'unpaid' | 'cancelled'
 
 export default function OrdersPage() {
@@ -165,7 +174,7 @@ export default function OrdersPage() {
     setPayBusy(true)
     try {
       await api.post(`/orders/${detail.id}/receive-payment`, { amount: v.amount, settlementAccount: v.account })
-      message.success('已收款')
+      message.success(t('已收款', 'Payment received'))
       setPayOpen(false)
       payForm.resetFields()
       refreshAll(detail.id)
@@ -186,11 +195,11 @@ export default function OrdersPage() {
     const items = Object.entries(retQty)
       .filter(([, q]) => q > 0)
       .map(([itemId, quantity]) => ({ itemId: Number(itemId), quantity }))
-    if (items.length === 0) return message.warning('填要退的数量')
+    if (items.length === 0) return message.warning(t('填要退的数量', 'Enter the quantity to return'))
     setRetBusy(true)
     try {
       await api.post(`/orders/${detail.id}/return`, { items, account: retAccount })
-      message.success('已退货')
+      message.success(t('已退货', 'Return completed'))
       setRetOpen(false)
       setRetQty({})
       refreshAll(detail.id)
@@ -205,7 +214,7 @@ export default function OrdersPage() {
     if (!detail) return
     try {
       await api.put(`/orders/${detail.id}/cancel`)
-      message.success('订单已作废，库存已退回')
+      message.success(t('订单已作废，库存已退回', 'Order voided, stock returned'))
       refreshAll(detail.id)
     } catch (e) {
       message.error((e as Error).message)
@@ -214,30 +223,30 @@ export default function OrdersPage() {
   const doPrint = () => window.print()
 
   const columns: ColumnsType<OrderRow> = [
-    { title: '单号', dataIndex: 'orderNo', render: (v) => <span style={{ fontFamily: 'monospace' }}>{v}</span> },
-    { title: '客户', render: (_, o) => o.customer?.name ?? '散客' },
-    { title: '应收', dataIndex: 'actualAmount', width: 100, render: (v) => fmtMoney(v) },
+    { title: t('单号', 'Order No.'), dataIndex: 'orderNo', render: (v) => <span style={{ fontFamily: 'monospace' }}>{v}</span> },
+    { title: t('客户', 'Customer'), render: (_, o) => o.customer?.name ?? t('散客', 'Walk-in') },
+    { title: t('应收', 'Due'), dataIndex: 'actualAmount', width: 100, render: (v) => fmtMoney(v) },
     {
-      title: '欠款',
+      title: t('欠款', 'Outstanding'),
       dataIndex: 'unpaidAmount',
       width: 110,
-      render: (v: number) => (v > 0 ? <b style={{ color: T.error }}>{fmtMoney(v)}</b> : <span style={{ color: T.emerald }}>已结清</span>),
+      render: (v: number) => (v > 0 ? <b style={{ color: T.error }}>{fmtMoney(v)}</b> : <span style={{ color: T.emerald }}>{t('已结清', 'Settled')}</span>),
     },
     {
-      title: '状态',
+      title: t('状态', 'Status'),
       dataIndex: 'status',
       width: 80,
-      render: (s) => (s === 'cancelled' ? <Tag>已作废</Tag> : <Tag color="green">已完成</Tag>),
+      render: (s) => (s === 'cancelled' ? <Tag>{t('已作废', 'Voided')}</Tag> : <Tag color="green">{t('已完成', 'Completed')}</Tag>),
     },
-    { title: '时间', dataIndex: 'createdAt', width: 130, render: (v) => fmtTime(v) },
+    { title: t('时间', 'Time'), dataIndex: 'createdAt', width: 130, render: (v) => fmtTime(v) },
     {
-      title: '操作',
+      title: t('操作', 'Actions'),
       key: 'ops',
       width: 90,
       fixed: 'right',
       render: (_, o) => (
         <Button size="small" type="link" onClick={() => openDetail(o.id)}>
-          详情
+          {t('详情', 'Details')}
         </Button>
       ),
     },
@@ -249,7 +258,7 @@ export default function OrdersPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 6 }}>
-          {([['all', '全部'], ['unpaid', '有欠款'], ['cancelled', '已作废']] as [Filter, string][]).map(([k, label]) => (
+          {([['all', t('全部', 'All')], ['unpaid', t('有欠款', 'Outstanding')], ['cancelled', t('已作废', 'Voided')]] as [Filter, string][]).map(([k, label]) => (
             <span
               key={k}
               onClick={() => {
@@ -279,7 +288,7 @@ export default function OrdersPage() {
           }}
         />
         <Input.Search
-          placeholder="搜单号 / 客户名"
+          placeholder={t('搜单号 / 客户名', 'Search order no. / customer')}
           allowClear
           defaultValue={kw}
           onSearch={(v) => {
@@ -289,7 +298,10 @@ export default function OrdersPage() {
           style={{ width: 210 }}
         />
         <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 'auto' }}>
-          开单在手机 App 更顺手（扫码/语音）；这里管理已开的单：收欠款、退货、作废
+          {t(
+            '开单在手机 App 更顺手（扫码/语音）；这里管理已开的单：收欠款、退货、作废',
+            'Creating orders is easier in the mobile app (scan / voice); here you manage existing orders: collect payment, returns, void',
+          )}
         </Typography.Text>
       </div>
 
@@ -300,14 +312,14 @@ export default function OrdersPage() {
           dataSource={rows}
           loading={loading}
           size="middle"
-          locale={{ emptyText: <Empty description="没有订单" /> }}
+          locale={{ emptyText: <Empty description={t('没有订单', 'No orders')} /> }}
           onRow={(o) => ({ onClick: () => openDetail(o.id), style: { cursor: 'pointer' } })}
           pagination={{
             current: page,
             pageSize,
             total,
             showSizeChanger: true,
-            showTotal: (t) => `共 ${t} 单`,
+            showTotal: (n) => t(`共 ${n} 单`, `${n} orders`),
             onChange: (p, ps) => {
               setPage(p)
               setPageSize(ps)
@@ -322,20 +334,20 @@ export default function OrdersPage() {
         open={!!detail || detailLoading}
         onClose={() => setDetail(null)}
         size="large"
-        title={detail ? `订单 ${detail.orderNo}` : '加载中'}
+        title={detail ? t(`订单 ${detail.orderNo}`, `Order ${detail.orderNo}`) : t('加载中', 'Loading')}
         className="print-area"
       >
         {detail && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
               <span>
-                客户：<b>{detail.customer?.name ?? '散客'}</b>
+                {t('客户：', 'Customer: ')}<b>{detail.customer?.name ?? t('散客', 'Walk-in')}</b>
               </span>
               <span style={{ color: T.secondary }}>
                 {dayjs(detail.createdAt).format('YYYY-MM-DD HH:mm')} · {detail.operator?.realName ?? ''}
               </span>
             </div>
-            {detail.status === 'cancelled' && <Tag style={{ marginBottom: 12 }}>此单已作废</Tag>}
+            {detail.status === 'cancelled' && <Tag style={{ marginBottom: 12 }}>{t('此单已作废', 'This order has been voided')}</Tag>}
             <Table<OrderItem>
               rowKey="id"
               size="small"
@@ -343,44 +355,51 @@ export default function OrdersPage() {
               pagination={false}
               columns={[
                 {
-                  title: '商品',
+                  title: t('商品', 'Product'),
                   render: (_, it) => (
                     <span>
                       {it.productName}
                       {it.specText ? <span style={{ color: T.secondary }}>（{it.specText}）</span> : ''}
-                      {it.returnedQty > 0 && <Tag color="orange" style={{ marginLeft: 6 }}>已退{fmtQty(it.returnedQty)}</Tag>}
+                      {it.returnedQty > 0 && (
+                        <Tag color="orange" style={{ marginLeft: 6 }}>
+                          {t(`已退${fmtQty(it.returnedQty)}`, `Returned ${fmtQty(it.returnedQty)}`)}
+                        </Tag>
+                      )}
                     </span>
                   ),
                 },
-                { title: '单价', dataIndex: 'unitPrice', width: 72, render: (v) => fmtMoney(v) },
-                { title: '数量', dataIndex: 'quantity', width: 56, render: (v) => fmtQty(v) },
-                { title: '小计', dataIndex: 'subtotal', width: 80, render: (v) => fmtMoney(v) },
+                { title: t('单价', 'Unit price'), dataIndex: 'unitPrice', width: 72, render: (v) => fmtMoney(v) },
+                { title: t('数量', 'Qty'), dataIndex: 'quantity', width: 56, render: (v) => fmtQty(v) },
+                { title: t('小计', 'Subtotal'), dataIndex: 'subtotal', width: 80, render: (v) => fmtMoney(v) },
               ]}
             />
             <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14 }}>
-              <Row label="原价合计" value={fmtMoney(detail.totalAmount)} />
-              {detail.discountAmount > 0 && <Row label="折扣" value={`- ${fmtMoney(detail.discountAmount)}`} />}
-              <Row label="应收" value={fmtMoney(detail.actualAmount)} bold />
-              <Row label="已收" value={fmtMoney(detail.paidAmount)} />
-              {detail.unpaidAmount > 0 && <Row label="欠款" value={fmtMoney(detail.unpaidAmount)} danger bold />}
-              {detail.settlementAccount && <Row label="结算" value={detail.settlementAccount} />}
+              <Row label={t('原价合计', 'Subtotal before discount')} value={fmtMoney(detail.totalAmount)} />
+              {detail.discountAmount > 0 && <Row label={t('折扣', 'Discount')} value={`- ${fmtMoney(detail.discountAmount)}`} />}
+              <Row label={t('应收', 'Due')} value={fmtMoney(detail.actualAmount)} bold />
+              <Row label={t('已收', 'Received')} value={fmtMoney(detail.paidAmount)} />
+              {detail.unpaidAmount > 0 && <Row label={t('欠款', 'Outstanding')} value={fmtMoney(detail.unpaidAmount)} danger bold />}
+              {detail.settlementAccount && <Row label={t('结算', 'Settlement account')} value={accountLabel(detail.settlementAccount)} />}
             </div>
 
             {detail.status === 'completed' && (
               <div className="no-print" style={{ marginTop: 20, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {detail.unpaidAmount > 0 && (
                   <Button type="primary" onClick={() => { payForm.setFieldsValue({ amount: detail.unpaidAmount, account: '现金' }); setPayOpen(true) }}>
-                    收欠款
+                    {t('收欠款', 'Collect payment')}
                   </Button>
                 )}
                 {canReturn && (
-                  <Button onClick={() => { setRetQty({}); setRetOpen(true) }}>退货</Button>
+                  <Button onClick={() => { setRetQty({}); setRetOpen(true) }}>{t('退货', 'Return')}</Button>
                 )}
                 <Button icon={<PrinterOutlined />} onClick={doPrint}>
-                  打印
+                  {t('打印', 'Print')}
                 </Button>
-                <Popconfirm title="作废这单？库存会退回、应收一并冲销" onConfirm={doCancel}>
-                  <Button danger>作废</Button>
+                <Popconfirm
+                  title={t('作废这单？库存会退回、应收一并冲销', 'Void this order? Stock will be returned and the receivable written off')}
+                  onConfirm={doCancel}
+                >
+                  <Button danger>{t('作废', 'Void')}</Button>
                 </Popconfirm>
               </div>
             )}
@@ -389,24 +408,45 @@ export default function OrdersPage() {
       </Drawer>
 
       {/* 收款 Modal */}
-      <Modal title="收欠款" open={payOpen} onCancel={() => setPayOpen(false)} onOk={doReceive} confirmLoading={payBusy} okText="确认收款">
+      <Modal
+        title={t('收欠款', 'Collect payment')}
+        open={payOpen}
+        onCancel={() => setPayOpen(false)}
+        onOk={doReceive}
+        confirmLoading={payBusy}
+        okText={t('确认收款', 'Confirm payment')}
+      >
         <Form form={payForm} layout="vertical">
-          <Form.Item name="amount" label="收款金额" rules={[{ required: true, message: '填金额' }]}>
+          <Form.Item name="amount" label={t('收款金额', 'Amount received')} rules={[{ required: true, message: t('填金额', 'Enter an amount') }]}>
             <InputNumber style={{ width: '100%' }} prefix="¥" min={0.01} precision={2} max={detail?.unpaidAmount} />
           </Form.Item>
-          <Form.Item name="account" label="收款方式">
-            <Select options={ACCOUNTS.map((a) => ({ value: a, label: a }))} />
+          <Form.Item name="account" label={t('收款方式', 'Payment method')}>
+            <Select options={ACCOUNTS.map((a) => ({ value: a, label: accountLabel(a) }))} />
           </Form.Item>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            当前欠款 {detail ? fmtMoney(detail.unpaidAmount) : ''}，可分次收
+            {t(
+              `当前欠款 ${detail ? fmtMoney(detail.unpaidAmount) : ''}，可分次收`,
+              `Outstanding ${detail ? fmtMoney(detail.unpaidAmount) : ''} — can be collected in instalments`,
+            )}
           </Typography.Text>
         </Form>
       </Modal>
 
       {/* 退货 Modal */}
-      <Modal title="销售退货" open={retOpen} onCancel={() => setRetOpen(false)} onOk={doReturn} confirmLoading={retBusy} okText="确认退货" width={520}>
+      <Modal
+        title={t('销售退货', 'Sales return')}
+        open={retOpen}
+        onCancel={() => setRetOpen(false)}
+        onOk={doReturn}
+        confirmLoading={retBusy}
+        okText={t('确认退货', 'Confirm return')}
+        width={520}
+      >
         <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-          填每个商品要退的数量（不超过可退数）。退货会退回库存、冲减应收/退现。
+          {t(
+            '填每个商品要退的数量（不超过可退数）。退货会退回库存、冲减应收/退现。',
+            'Enter the quantity to return for each product (no more than the returnable amount). Returns add stock back and offset the receivable or refund cash.',
+          )}
         </Typography.Paragraph>
         {detail?.items.map((it) => {
           const returnable = it.quantity - it.returnedQty
@@ -415,7 +455,7 @@ export default function OrdersPage() {
               <span style={{ flex: 1, fontSize: 13 }}>
                 {it.productName}
                 {it.specText ? `（${it.specText}）` : ''}
-                <span style={{ color: T.secondary }}> 可退 {fmtQty(returnable)}</span>
+                <span style={{ color: T.secondary }}>{t(` 可退 ${fmtQty(returnable)}`, ` ${fmtQty(returnable)} returnable`)}</span>
               </span>
               <InputNumber
                 size="small"
@@ -430,8 +470,8 @@ export default function OrdersPage() {
           )
         })}
         <div style={{ marginTop: 12 }}>
-          退款方式：
-          <Select size="small" value={retAccount} onChange={setRetAccount} options={ACCOUNTS.map((a) => ({ value: a, label: a }))} style={{ width: 120, marginLeft: 8 }} />
+          {t('退款方式：', 'Refund method: ')}
+          <Select size="small" value={retAccount} onChange={setRetAccount} options={ACCOUNTS.map((a) => ({ value: a, label: accountLabel(a) }))} style={{ width: 120, marginLeft: 8 }} />
         </div>
       </Modal>
     </div>

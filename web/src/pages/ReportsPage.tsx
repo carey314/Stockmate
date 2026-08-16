@@ -6,6 +6,7 @@ import api from '../api/client'
 import { useAuth } from '../auth'
 import EChart from '../components/EChart'
 import { fmtMoney, fmtQty } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 // ===== 接口形状（对齐 reports.js）=====
@@ -46,10 +47,10 @@ interface PurchaseRep {
 }
 
 const PRESETS: { label: string; range: () => [Dayjs, Dayjs] }[] = [
-  { label: '今天', range: () => [dayjs(), dayjs()] },
-  { label: '近7天', range: () => [dayjs().subtract(6, 'day'), dayjs()] },
-  { label: '近30天', range: () => [dayjs().subtract(29, 'day'), dayjs()] },
-  { label: '本月', range: () => [dayjs().startOf('month'), dayjs()] },
+  { label: t('今天', 'Today'), range: () => [dayjs(), dayjs()] },
+  { label: t('近7天', 'Last 7 days'), range: () => [dayjs().subtract(6, 'day'), dayjs()] },
+  { label: t('近30天', 'Last 30 days'), range: () => [dayjs().subtract(29, 'day'), dayjs()] },
+  { label: t('本月', 'This month'), range: () => [dayjs().startOf('month'), dayjs()] },
 ]
 
 function Card({ title, extra, children }: { title: string; extra?: React.ReactNode; children: React.ReactNode }) {
@@ -165,24 +166,24 @@ export default function ReportsPage() {
         />
         {!isAdmin && (
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            利润 / 资金流水 / 员工业绩仅老板可见
+            {t('利润 / 资金流水 / 员工业绩仅老板可见', 'Profit / cash flow / staff performance are visible to the owner only')}
           </Typography.Text>
         )}
       </div>
 
       {/* 经营利润（仅老板）*/}
       {isAdmin && (
-        <Card title="经营利润">
+        <Card title={t('经营利润', 'Profit')}>
           <Body data={profit.data} error={profit.error}>
             {(d) => (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 16, marginBottom: 12 }}>
-                  {stat('销售额', d.sales)}
-                  {stat('销货成本', d.cogs)}
-                  {stat('经营支出', d.expenses)}
-                  {stat('利润', d.profit, true, d.profit >= 0 ? T.emerald : T.error)}
-                  {d.lossAmount > 0 && stat('损耗（报损/过期）', d.lossAmount, true, T.orange)}
-                  {stat('订单数', d.orderCount, false)}
+                  {stat(t('销售额', 'Revenue'), d.sales)}
+                  {stat(t('销货成本', 'Cost of goods sold'), d.cogs)}
+                  {stat(t('经营支出', 'Operating expenses'), d.expenses)}
+                  {stat(t('利润', 'Profit'), d.profit, true, d.profit >= 0 ? T.emerald : T.error)}
+                  {d.lossAmount > 0 && stat(t('损耗（报损/过期）', 'Loss (damaged / expired)'), d.lossAmount, true, T.orange)}
+                  {stat(t('订单数', 'Orders'), d.orderCount, false)}
                 </div>
                 {d.byDay.length > 1 && (
                   <EChart
@@ -205,8 +206,8 @@ export default function ReportsPage() {
                         axisLabel: { color: T.secondary, fontSize: 12 },
                       },
                       series: [
-                        { name: '销售额', type: 'line', smooth: 0.4, showSymbol: false, data: d.byDay.map((x) => x.sales), lineStyle: { width: 3, color: T.primary }, itemStyle: { color: T.primary } },
-                        { name: '利润', type: 'line', smooth: 0.4, showSymbol: false, data: d.byDay.map((x) => x.profit), lineStyle: { width: 2, color: T.emerald }, itemStyle: { color: T.emerald } },
+                        { name: t('销售额', 'Revenue'), type: 'line', smooth: 0.4, showSymbol: false, data: d.byDay.map((x) => x.sales), lineStyle: { width: 3, color: T.primary }, itemStyle: { color: T.primary } },
+                        { name: t('利润', 'Profit'), type: 'line', smooth: 0.4, showSymbol: false, data: d.byDay.map((x) => x.profit), lineStyle: { width: 2, color: T.emerald }, itemStyle: { color: T.emerald } },
                       ],
                     }}
                   />
@@ -218,11 +219,11 @@ export default function ReportsPage() {
       )}
 
       {/* 销售按商品 */}
-      <Card title="销售统计（按商品）">
+      <Card title={t('销售统计（按商品）', 'Sales by product')}>
         <Body data={sales.data} error={sales.error}>
           {(d) =>
             d.list.length === 0 ? (
-              <Typography.Text type="secondary">这段时间没有销售记录</Typography.Text>
+              <Typography.Text type="secondary">{t('这段时间没有销售记录', 'No sales in this period')}</Typography.Text>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
                 <EChart
@@ -241,7 +242,7 @@ export default function ReportsPage() {
                     },
                     series: [
                       {
-                        name: '销售额',
+                        name: t('销售额', 'Revenue'),
                         type: 'bar',
                         barWidth: 14,
                         data: d.list.slice(0, 8).map((x) => x.amount),
@@ -256,14 +257,14 @@ export default function ReportsPage() {
                   dataSource={d.list.slice(0, 10)}
                   pagination={false}
                   columns={[
-                    { title: '商品', render: (_, r) => `${r.productName}${r.specText ? `（${r.specText}）` : ''}` },
-                    { title: '数量', dataIndex: 'qty', width: 70, render: (v) => fmtQty(v) },
-                    { title: '金额', dataIndex: 'amount', width: 90, render: (v) => fmtMoney(v) },
+                    { title: t('商品', 'Product'), render: (_, r) => `${r.productName}${r.specText ? `（${r.specText}）` : ''}` },
+                    { title: t('数量', 'Qty'), dataIndex: 'qty', width: 70, render: (v) => fmtQty(v) },
+                    { title: t('金额', 'Amount'), dataIndex: 'amount', width: 90, render: (v) => fmtMoney(v) },
                     ...(isAdmin
-                      ? [{ title: '毛利', dataIndex: 'profit', width: 90, render: (v: number) => fmtMoney(v) }]
+                      ? [{ title: t('毛利', 'Gross profit'), dataIndex: 'profit', width: 90, render: (v: number) => fmtMoney(v) }]
                       : []),
                   ]}
-                  footer={() => `合计 ${fmtMoney(d.totalAmount)}`}
+                  footer={() => t(`合计 ${fmtMoney(d.totalAmount)}`, `Total ${fmtMoney(d.totalAmount)}`)}
                 />
               </div>
             )
@@ -273,17 +274,17 @@ export default function ReportsPage() {
 
       {/* 库存统计（时点数据，不吃日期范围）*/}
       <Card
-        title="库存统计"
-        extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>此刻时点数据，不受日期筛选影响</Typography.Text>}
+        title={t('库存统计', 'Inventory stats')}
+        extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('此刻时点数据，不受日期筛选影响', 'Live snapshot — not affected by the date filter')}</Typography.Text>}
       >
         <Body data={inv.data} error={inv.error}>
           {(d) => (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
-                  {stat('库存总值（按成本）', d.totalValue)}
-                  {stat('总件数', d.totalStock, false)}
-                  {stat('规格数', d.skuCount, false)}
+                  {stat(t('库存总值（按成本）', 'Stock value (at cost)'), d.totalValue)}
+                  {stat(t('总件数', 'Total units'), d.totalStock, false)}
+                  {stat(t('规格数', 'SKUs'), d.skuCount, false)}
                 </div>
                 {d.byType.length > 0 && (
                   <EChart
@@ -297,9 +298,9 @@ export default function ReportsPage() {
                           radius: ['45%', '72%'],
                           center: ['32%', '50%'],
                           label: { show: false },
-                          data: d.byType.map((t, i) => ({
-                            name: t.name,
-                            value: t.value,
+                          data: d.byType.map((it, i) => ({
+                            name: it.name,
+                            value: it.value,
                             itemStyle: { color: [T.primary, T.secondaryFixedDim, '#727577', T.primaryFixed, T.surfaceVariant, T.orange][i % 6] },
                           })),
                         },
@@ -313,11 +314,11 @@ export default function ReportsPage() {
                 rowKey={(r) => r.productName + r.specText}
                 dataSource={d.lowStock}
                 pagination={false}
-                locale={{ emptyText: '没有低库存规格 👍' }}
+                locale={{ emptyText: t('没有低库存规格 👍', 'No low-stock SKUs 👍') }}
                 columns={[
-                  { title: '低库存规格', render: (_, r) => `${r.productName}${r.specText ? `（${r.specText}）` : ''}` },
-                  { title: '库存', dataIndex: 'stock', width: 80, render: (v) => <b style={{ color: T.error }}>{fmtQty(v)}</b> },
-                  { title: '预警线', dataIndex: 'minQuantity', width: 80, render: (v) => fmtQty(v) },
+                  { title: t('低库存规格', 'Low-stock SKU'), render: (_, r) => `${r.productName}${r.specText ? `（${r.specText}）` : ''}` },
+                  { title: t('库存', 'Stock'), dataIndex: 'stock', width: 80, render: (v) => <b style={{ color: T.error }}>{fmtQty(v)}</b> },
+                  { title: t('预警线', 'Alert level'), dataIndex: 'minQuantity', width: 80, render: (v) => fmtQty(v) },
                 ]}
               />
             </div>
@@ -326,40 +327,40 @@ export default function ReportsPage() {
       </Card>
 
       {/* 进货统计 */}
-      <Card title="进货统计">
+      <Card title={t('进货统计', 'Purchase stats')}>
         <Body data={purchase.data} error={purchase.error}>
           {(d) =>
             d.orderCount === 0 ? (
-              <Typography.Text type="secondary">这段时间没有进货</Typography.Text>
+              <Typography.Text type="secondary">{t('这段时间没有进货', 'No purchases in this period')}</Typography.Text>
             ) : (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 16, marginBottom: 14 }}>
-                  {stat('进货总额', d.total)}
-                  {stat('进货单数', d.orderCount, false)}
+                  {stat(t('进货总额', 'Purchase total'), d.total)}
+                  {stat(t('进货单数', 'Purchase orders'), d.orderCount, false)}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                   <Table
                     size="small"
                     rowKey="name"
-                    title={() => '按商品'}
+                    title={() => t('按商品', 'By product')}
                     dataSource={d.byProduct.slice(0, 8)}
                     pagination={false}
                     columns={[
-                      { title: '商品', dataIndex: 'name' },
-                      { title: '数量', dataIndex: 'qty', width: 70, render: (v) => fmtQty(v) },
-                      { title: '金额', dataIndex: 'amount', width: 90, render: (v) => fmtMoney(v) },
+                      { title: t('商品', 'Product'), dataIndex: 'name' },
+                      { title: t('数量', 'Qty'), dataIndex: 'qty', width: 70, render: (v) => fmtQty(v) },
+                      { title: t('金额', 'Amount'), dataIndex: 'amount', width: 90, render: (v) => fmtMoney(v) },
                     ]}
                   />
                   <Table
                     size="small"
                     rowKey="name"
-                    title={() => '按供应商'}
+                    title={() => t('按供应商', 'By supplier')}
                     dataSource={d.bySupplier}
                     pagination={false}
                     columns={[
-                      { title: '供应商', dataIndex: 'name' },
-                      { title: '单数', dataIndex: 'orders', width: 70 },
-                      { title: '金额', dataIndex: 'amount', width: 90, render: (v) => fmtMoney(v) },
+                      { title: t('供应商', 'Supplier'), dataIndex: 'name' },
+                      { title: t('单数', 'Orders'), dataIndex: 'orders', width: 70 },
+                      { title: t('金额', 'Amount'), dataIndex: 'amount', width: 90, render: (v) => fmtMoney(v) },
                     ]}
                   />
                 </div>
@@ -371,26 +372,26 @@ export default function ReportsPage() {
 
       {/* 资金流水（仅老板）*/}
       {isAdmin && (
-        <Card title="资金流水" extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>退货冲账不算真钱，已排除</Typography.Text>}>
+        <Card title={t('资金流水', 'Cash flow')} extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('退货冲账不算真钱，已排除', 'Return write-offs are not real cash and are excluded')}</Typography.Text>}>
           <Body data={cash.data} error={cash.error}>
             {(d) => (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(120px, 220px))', gap: 16, marginBottom: 14 }}>
-                  {stat('流入', d.inflow, true, T.emerald)}
-                  {stat('流出', d.outflow, true, T.error)}
-                  {stat('净额', d.net, true, d.net >= 0 ? T.emerald : T.error)}
+                  {stat(t('流入', 'Inflow'), d.inflow, true, T.emerald)}
+                  {stat(t('流出', 'Outflow'), d.outflow, true, T.error)}
+                  {stat(t('净额', 'Net'), d.net, true, d.net >= 0 ? T.emerald : T.error)}
                 </div>
                 <Table
                   size="small"
                   rowKey="_k"
                   dataSource={d.rows.slice(0, 20).map((r, i) => ({ ...r, _k: i }))}
                   pagination={false}
-                  locale={{ emptyText: '这段时间没有资金往来' }}
+                  locale={{ emptyText: t('这段时间没有资金往来', 'No cash movements in this period') }}
                   columns={[
-                    { title: '时间', dataIndex: 'at', width: 150, render: (v) => dayjs(v).format('MM-DD HH:mm') },
-                    { title: '类型', dataIndex: 'type', width: 70 },
+                    { title: t('时间', 'Time'), dataIndex: 'at', width: 150, render: (v) => dayjs(v).format('MM-DD HH:mm') },
+                    { title: t('类型', 'Type'), dataIndex: 'type', width: 70 },
                     {
-                      title: '金额',
+                      title: t('金额', 'Amount'),
                       dataIndex: 'amount',
                       width: 110,
                       render: (v: number) => (
@@ -400,13 +401,16 @@ export default function ReportsPage() {
                         </b>
                       ),
                     },
-                    { title: '账户', dataIndex: 'account', width: 90, render: (v) => v ?? '-' },
-                    { title: '备注', dataIndex: 'note', ellipsis: true, render: (v) => v ?? '-' },
+                    { title: t('账户', 'Account'), dataIndex: 'account', width: 90, render: (v) => v ?? '-' },
+                    { title: t('备注', 'Note'), dataIndex: 'note', ellipsis: true, render: (v) => v ?? '-' },
                   ]}
                 />
                 {d.rows.length > 20 && (
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    只显示最近 20 条（区间内共 {d.rows.length} 条）
+                    {t(
+                      `只显示最近 20 条（区间内共 ${d.rows.length} 条）`,
+                      `Showing the latest 20 of ${d.rows.length} records in this period`,
+                    )}
                   </Typography.Text>
                 )}
               </>
@@ -417,7 +421,7 @@ export default function ReportsPage() {
 
       {/* 员工业绩（仅老板）*/}
       {isAdmin && (
-        <Card title="员工业绩">
+        <Card title={t('员工业绩', 'Staff performance')}>
           <Body data={staff.data} error={staff.error}>
             {(d) => (
               <Table
@@ -425,12 +429,12 @@ export default function ReportsPage() {
                 rowKey="name"
                 dataSource={d.list}
                 pagination={false}
-                locale={{ emptyText: '这段时间没有成交订单' }}
+                locale={{ emptyText: t('这段时间没有成交订单', 'No completed orders in this period') }}
                 columns={[
-                  { title: '员工', dataIndex: 'name' },
-                  { title: '订单数', dataIndex: 'orders', width: 90 },
-                  { title: '销售额', dataIndex: 'sales', width: 110, render: (v) => fmtMoney(v) },
-                  { title: '毛利', dataIndex: 'profit', width: 110, render: (v) => fmtMoney(v) },
+                  { title: t('员工', 'Staff'), dataIndex: 'name' },
+                  { title: t('订单数', 'Orders'), dataIndex: 'orders', width: 90 },
+                  { title: t('销售额', 'Revenue'), dataIndex: 'sales', width: 110, render: (v) => fmtMoney(v) },
+                  { title: t('毛利', 'Gross profit'), dataIndex: 'profit', width: 110, render: (v) => fmtMoney(v) },
                 ]}
               />
             )}

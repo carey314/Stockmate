@@ -15,6 +15,7 @@ import CountUp from '../components/CountUp'
 import SalesTrendChart, { type SalesPoint } from '../components/SalesTrendChart'
 import RestockCard from '../components/RestockCard'
 import { fmtMoney } from '../lib/format'
+import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 interface Overview {
@@ -85,21 +86,46 @@ export default function DashboardPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-        {profile?.shopName || '你的店'} · 批量改商品、看报表、打对账单，都比手机上快
+        {profile?.shopName || t('你的店', 'Your store')}
+        {t(
+          ' · 批量改商品、看报表、打对账单，都比手机上快',
+          ' · Bulk-edit products, read reports and print statements — all faster than on the phone',
+        )}
       </Typography.Text>
       {isEmptyStore && (
         <div style={{ ...cardStyle, padding: 28, background: 'linear-gradient(120deg, #f0f3ff, #e7eeff)' }}>
           <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            👋 欢迎开张！三步就能开始做生意
+            {t('👋 欢迎开张！三步就能开始做生意', '👋 Welcome! Three steps to start doing business')}
           </Typography.Title>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 18, fontSize: 13 }}>
-            你的店还是空的。跟着下面走一遍，几分钟就能把家底录进来。
+            {t(
+              '你的店还是空的。跟着下面走一遍，几分钟就能把家底录进来。',
+              'Your store is still empty. Follow these steps and you can get everything in within minutes.',
+            )}
           </Typography.Paragraph>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {[
-              { n: 1, t: '配好你的品类', d: '换个行业？让 AI 帮你配字段', to: '/types', btn: '去品类管理' },
-              { n: 2, t: '录入你的商品', d: '一批货粘贴进来，AI 整理成清单', to: '/import', btn: '去批量导入' },
-              { n: 3, t: '在手机上开单', d: '扫码/语音开单收钱在 App 更顺手', to: null, btn: '打开手机 App' },
+              {
+                n: 1,
+                t: t('配好你的品类', 'Set up your categories'),
+                d: t('换个行业？让 AI 帮你配字段', 'Different trade? Let AI build the fields for you'),
+                to: '/types',
+                btn: t('去品类管理', 'Manage categories'),
+              },
+              {
+                n: 2,
+                t: t('录入你的商品', 'Add your products'),
+                d: t('一批货粘贴进来，AI 整理成清单', 'Paste in a batch of goods, AI turns it into a list'),
+                to: '/import',
+                btn: t('去批量导入', 'Bulk import'),
+              },
+              {
+                n: 3,
+                t: t('在手机上开单', 'Create orders on your phone'),
+                d: t('扫码/语音开单收钱在 App 更顺手', 'Scanning, voice entry and taking payment work better in the app'),
+                to: null,
+                btn: t('打开手机 App', 'Open the mobile app'),
+              },
             ].map((s) => (
               <div key={s.n} style={{ flex: '1 1 200px', background: '#fff', borderRadius: 16, padding: 18 }}>
                 <div
@@ -139,7 +165,7 @@ export default function DashboardPage() {
           <Typography.Text type="secondary">{ovError}</Typography.Text>
           <br />
           <Button style={{ marginTop: 10 }} onClick={loadOverview}>
-            重试
+            {t('重试', 'Retry')}
           </Button>
         </div>
       ) : (
@@ -150,14 +176,14 @@ export default function DashboardPage() {
           // minmax 195：1500 视口（含右栏）恰好一行 4 张；再窄/字号特大时自动降列数
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(195px, 1fr))', gap: 20 }}>
             <StatCard
-              title="今日销售额"
+              title={t('今日销售额', "Today's Sales")}
               value={<CountUp value={ov.todaySales} format={fmtMoney} speedBlur />}
               icon={<AccountBookOutlined />}
               trend={trend.sales}
               spark={series?.map((s) => s.sales)}
             />
             <StatCard
-              title="今日订单数"
+              title={t('今日订单数', "Today's Orders")}
               value={<CountUp value={ov.todayOrderCount} />}
               icon={<ShoppingOutlined />}
               trend={trend.orders}
@@ -165,22 +191,31 @@ export default function DashboardPage() {
             />
             {isAdmin ? (
               <StatCard
-                title="今日毛利"
+                title={t('今日毛利', "Today's Gross Profit")}
                 value={<CountUp value={ov.todayProfit} format={fmtMoney} speedBlur />}
                 icon={<RiseOutlined />}
                 note={
                   ov.profitUnreliable
-                    ? `其中 ${fmtMoney(ov.noCostSales)} 的货没填进价（${ov.noCostProductNames
-                        .slice(0, 2)
-                        .join('、')}${ov.noCostProductNames.length > 2 ? '…' : ''}）`
+                    ? t(
+                        `其中 ${fmtMoney(ov.noCostSales)} 的货没填进价（${ov.noCostProductNames
+                          .slice(0, 2)
+                          .join('、')}${ov.noCostProductNames.length > 2 ? '…' : ''}）`,
+                        `${fmtMoney(ov.noCostSales)} of this has no cost price on file (${ov.noCostProductNames
+                          .slice(0, 2)
+                          .join(', ')}${ov.noCostProductNames.length > 2 ? '…' : ''})`,
+                      )
                     : undefined
                 }
               />
             ) : (
-              <StatCard title="在售商品" value={<CountUp value={ov.productCount} />} icon={<AppstoreOutlined />} />
+              <StatCard
+                title={t('在售商品', 'Products On Sale')}
+                value={<CountUp value={ov.productCount} />}
+                icon={<AppstoreOutlined />}
+              />
             )}
             <StatCard
-              title="库存预警"
+              title={t('库存预警', 'Low Stock')}
               value={<CountUp value={ov.lowStockCount} />}
               icon={<WarningOutlined />}
               alert={ov.lowStockCount > 0}
@@ -192,7 +227,10 @@ export default function DashboardPage() {
       {ov && ov.lowStockCount > 0 && <RestockCard />}
       {!isAdmin && (
         <Typography.Text type="secondary" style={{ fontSize: 12, color: T.secondary }}>
-          员工账号看不到毛利与 AI 助手，如需请找老板开通管理员。
+          {t(
+            '员工账号看不到毛利与 AI 助手，如需请找老板开通管理员。',
+            'Staff accounts cannot see gross profit or the AI assistant. Ask the owner for admin access if you need them.',
+          )}
         </Typography.Text>
       )}
     </div>
