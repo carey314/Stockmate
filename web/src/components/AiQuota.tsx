@@ -17,9 +17,12 @@ export function AiQuotaTag({ bucket }: { bucket: 'core' | 'other' }) {
   // null = 不限次。别当 0 算，会给付费用户误报"额度用完"
   if (ent.plan !== 'free') {
     return (
-      <Tag icon={<CrownOutlined />} color="gold" style={{ borderRadius: 999 }}>
-        {t('专业版 · 不限次', 'Pro · Unlimited')}
-      </Tag>
+      // 与 App 订阅页口径一致：不限次但有每天 100 次防滥用上限，打满时这里不许自相矛盾
+      <Tooltip title={t('不限次（每天 100 次防滥用上限，正常记账用不到这个量）', 'Unlimited (100/day anti-abuse cap — normal use never hits it)')}>
+        <Tag icon={<CrownOutlined />} color="gold" style={{ borderRadius: 999 }}>
+          {t('专业版 · 不限次', 'Pro · Unlimited')}
+        </Tag>
+      </Tooltip>
     )
   }
   // 免费版但服务端没配额度（FREE_AI_DAILY_* 未设=不限量）：无墙可撞，不显示也不冒充专业版

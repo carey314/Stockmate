@@ -10,6 +10,7 @@ import {
 import { Navigate, useLocation } from 'react-router-dom'
 import { Spin } from 'antd'
 import api, { TOKEN_KEY, USER_KEY, type ApiUser, type Profile } from './api/client'
+import { clearEntitlementCache } from './hooks/useEntitlement'
 
 interface AuthState {
   user: ApiUser | null
@@ -54,9 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (e.key !== TOKEN_KEY) return
       if (!e.newValue) {
         localStorage.removeItem(USER_KEY)
+        clearEntitlementCache() // 跨标签同步下线同样要清权益缓存
         setUser(null)
         setProfile(null)
       } else {
+        clearEntitlementCache()
         refreshProfile().catch(() => {})
       }
     }
@@ -72,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       localStorage.setItem(TOKEN_KEY, data.token)
       localStorage.setItem(USER_KEY, JSON.stringify(data.user))
+      clearEntitlementCache() // 不登出直接换号也不能带着上个店的权益缓存
       setUser(data.user)
       refreshProfile().catch(() => {})
     },
@@ -81,6 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    // SPA 登出不重载模块——模块级权益缓存不清，会把上家店的 plan/额度带给下个登录的账号（跨租户串台）
+    clearEntitlementCache()
     setUser(null)
     setProfile(null)
   }, [])
