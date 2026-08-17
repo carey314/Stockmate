@@ -38,3 +38,5 @@ app/ios/.symlinks/
 # ===== 临时/草稿 =====
 scratchpad/
 tmp/
+app/android/build/
+app/android/.gradle/
