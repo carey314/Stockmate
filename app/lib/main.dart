@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/api.dart';
 import 'core/providers.dart';
+import 'core/local_notice.dart';
 import 'core/theme.dart';
 import 'features/auth/login_screen.dart';
 import 'features/shell/app_shell.dart';
@@ -22,6 +23,7 @@ import 'features/products/product_form_screen.dart';
 import 'features/products/product_detail_screen.dart';
 import 'features/scan/scan_screen.dart';
 import 'features/scan/scan_code_screen.dart';
+import 'features/pro/pro_screen.dart';
 import 'features/voice/voice_entry_screen.dart';
 import 'features/orders/orders_screen.dart';
 import 'features/orders/order_create_screen.dart';
@@ -39,6 +41,8 @@ import 'features/inventory/inventory_move_screen.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'features/purchase/purchase_orders_screen.dart';
 import 'features/profile/about_screen.dart';
+import 'features/profile/account_screen.dart';
+import 'features/reports/calendar_screen.dart';
 import 'features/purchase/purchase_order_create_screen.dart';
 import 'features/purchase/purchase_order_detail_screen.dart';
 
@@ -92,6 +96,8 @@ final _routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(path: '/about', builder: (_, __) => const AboutScreen()),
+      GoRoute(path: '/account', builder: (_, __) => const AccountScreen()),
+      GoRoute(path: '/calendar', builder: (_, __) => const CalendarScreen()),
       GoRoute(path: '/types', builder: (_, __) => const TypesScreen()),
       GoRoute(path: '/types/new', builder: (_, s) => TypeEditScreen(aiTheme: s.uri.queryParameters['theme'])),
       GoRoute(path: '/types/:id', builder: (_, s) => TypeEditScreen(typeId: int.parse(s.pathParameters['id']!))),
@@ -103,6 +109,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/products/:id/edit', builder: (_, s) => ProductFormScreen(productId: int.parse(s.pathParameters['id']!))),
       GoRoute(path: '/products/:id', builder: (_, s) => ProductDetailScreen(productId: int.parse(s.pathParameters['id']!))),
       GoRoute(path: '/voice-entry', builder: (_, __) => const VoiceEntryScreen()),
+      GoRoute(path: '/pro', builder: (_, __) => const ProScreen()),
       GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
       GoRoute(path: '/ask', builder: (_, __) => const AskScreen()),
       GoRoute(path: '/scan-code', builder: (_, __) => const ScanCodeScreen()),
@@ -135,6 +142,12 @@ class StockMateApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(_routerProvider);
+    // 通知点开后往哪跳，由这里注入——通知层不认识 GoRouter。
+    // flushPendingRoute 补的是"App 没在运行时点通知"那一次：
+    // 那时路由还没建好，点击被暂存了下来。
+    LocalNotice.I.onOpenRoute = router.go;
+    LocalNotice.I.flushPendingRoute();
     return MaterialApp.router(
       title: 'StockMate 智存',
       debugShowCheckedModeBanner: false,
@@ -149,7 +162,7 @@ class StockMateApp extends ConsumerWidget {
       supportedLocales: const [Locale('zh', 'CN'), Locale('zh'), Locale('en')],
       // 首启隐私同意门（中国区合规）：同意前整屏拦截
       builder: (context, child) => PrivacyGate(child: child ?? const SizedBox()),
-      routerConfig: ref.watch(_routerProvider),
+      routerConfig: router,
     );
   }
 }

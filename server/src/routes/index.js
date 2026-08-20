@@ -47,6 +47,7 @@ r.post('/auth/register', authLimiter, wrap(authCtl.register)); // 用户名密�
 r.post('/auth/oauth', authLimiter, wrap(authCtl.oauthLogin)); // 平台账号登录(apple已实现/huawei/wechat待接)
 r.get('/auth/profile', auth, wrap(authCtl.profile));
 r.get('/me/entitlement', auth, wrap(require('../controllers/entitlement').mine)); // 当前权益+本月AI用量
+r.post('/me/entitlement/apple', auth, wrap(require('../controllers/entitlement').redeemApple)); // 苹果内购收据 → 权益
 r.put('/auth/profile', auth, wrap(authCtl.updateProfile)); // 改店名/手机
 r.put('/auth/password', auth, wrap(authCtl.changePassword));
 r.post('/auth/delete-account', auth, wrap(authCtl.deleteAccount)); // 删除账号(App Store 5.1.1v)
@@ -165,6 +166,9 @@ r.get('/reports/profit', auth, adminOnly, wrap(reportsCtl.profit)); // 经营利
 r.get('/reports/sales-by-product', auth, wrap(reportsCtl.salesByProduct)); // 销售统计(按商品)
 r.get('/reports/inventory', auth, wrap(reportsCtl.inventory)); // 库存统计
 r.get('/reports/cashflow', auth, adminOnly, wrap(reportsCtl.cashflow)); // 资金流水(仅老板)
+r.get('/calendar/month', auth, adminOnly, wrap(require('../controllers/calendar').month)); // 收益日历·月格子(仅老板)
+r.get('/calendar/day', auth, adminOnly, wrap(require('../controllers/calendar').day)); // 收益日历·单日明细(仅老板)
+r.get('/calendar/week', auth, adminOnly, wrap(require('../controllers/calendar').week)); // 收益日历·周视图(仅老板)
 r.get('/reports/customer-statement', auth, wrap(reportsCtl.customerStatement)); // 客户对账单
 r.get('/reports/staff-performance', auth, adminOnly, wrap(reportsCtl.staffPerformance)); // 员工业绩(仅老板)
 r.get('/reports/purchase-stats', auth, wrap(reportsCtl.purchaseStats)); // 进货统计

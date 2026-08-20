@@ -97,6 +97,11 @@ ThemeData buildTheme() {
         borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
       ),
       hintStyle: const TextStyle(color: Color(0xFF9AA0AE), fontSize: 15),
+      // 表单一律用 labelText 而不是 hintText 当标签：
+      // hint 在填了值之后就消失了，一屏"12.0 / 0.0 / 0"没人知道哪个是售价哪个是成本。
+      // label 空着时跟 hint 一样占位，一填值就缩到框顶继续挂着。
+      labelStyle: const TextStyle(color: Color(0xFF9AA0AE), fontSize: 15),
+      floatingLabelStyle: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13, fontWeight: FontWeight.w600),
     ),
     chipTheme: base.chipTheme.copyWith(
       backgroundColor: AppColors.primary.withValues(alpha: 0.08),
@@ -208,4 +213,25 @@ class AiGradientCard extends StatelessWidget {
       child: child,
     );
   }
+}
+
+/// 可折叠大标题栏（tab 页专用）。
+///
+/// 别再写"空 AppBar + 正文大标题"两层：空标题的 AppBar 照样占满 56pt，
+/// 加上正文大标题，顶部白吃 120+pt，而且两处都写同一个词。
+/// 这个组件让大标题直接长在 AppBar 里，往下滚自己折叠成普通标题栏。
+class AppLargeTitleBar extends StatelessWidget {
+  final String title;
+  const AppLargeTitleBar(this.title, {super.key});
+
+  @override
+  Widget build(BuildContext context) => SliverAppBar.medium(
+        title: Text(title),
+        // 全局 appBarTheme 的背景是透明的（普通 AppBar 与页面同色，看不出来）。
+        // 但钉住的 SliverAppBar 悬在滚动内容之上，透明会让内容从标题底下透出来。
+        backgroundColor: AppColors.surface,
+        scrolledUnderElevation: 0,
+        // 展开态按 Material 规范是 24pt 级；沿用全局的 17pt 会显得没分量
+        titleTextStyle: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.onSurface),
+      );
 }

@@ -19,11 +19,41 @@ class LocalNotice {
   static const _kMinute = 'ln_minute';
   static const _kPrompted = 'ln_prompted'; // 开单后引导只弹一次
 
+  /// 通知点开后落到口述记账页——收摊那一刻最想做的就是把今天的账说一遍
+  static const _kRouteVoiceEntry = '/voice-entry';
+
   static const _idDaily = 9001;
   static const _idRecall = 9002;
 
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _inited = false;
+
+  /// 点通知要跳去哪。main.dart 启动时注入路由跳转函数——
+  /// 通知层不该知道 GoRouter 的存在，跳转能力从外面给。
+  void Function(String route)? onOpenRoute;
+
+  /// 冷启动时点通知：那一刻路由还没建好，先存下来等 main.dart 注入后补跳
+  String? _pendingRoute;
+
+  /// 通知点击统一入口。payload 就是要跳的路由。
+  void _handleTap(String? payload) {
+    final route = (payload == null || payload.isEmpty) ? _kRouteVoiceEntry : payload;
+    final go = onOpenRoute;
+    if (go == null) {
+      _pendingRoute = route;
+    } else {
+      go(route);
+    }
+  }
+
+  /// main.dart 注入跳转能力后调用，把冷启动攒下的那次点击补上
+  void flushPendingRoute() {
+    final r = _pendingRoute;
+    if (r != null && onOpenRoute != null) {
+      _pendingRoute = null;
+      onOpenRoute!(r);
+    }
+  }
 
   Future<void> _ensureInit() async {
     if (_inited) return;
@@ -40,7 +70,13 @@ class LocalNotice {
           requestSoundPermission: false,
         ),
       ),
+      onDidReceiveNotificationResponse: (resp) => _handleTap(resp.payload),
     );
+    // App 完全没在运行时点的通知，走这条补上（initialize 的回调拿不到）
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp ?? false) {
+      _handleTap(launch!.notificationResponse?.payload);
+    }
     _inited = true;
   }
 
@@ -133,6 +169,7 @@ class LocalNotice {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time, // 每天同一时刻
+      payload: _kRouteVoiceEntry,
     );
     final recallAt = tz.TZDateTime(tz.local, first.year, first.month, first.day, h, m)
         .add(const Duration(days: 3));
@@ -144,6 +181,7 @@ class LocalNotice {
       _details,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      payload: _kRouteVoiceEntry,
     );
   }
 

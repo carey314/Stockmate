@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ 的 SplashScreen API。
+     系统会强制接管启动页：底色铺满，中间画一个圆形图标。旧的 windowBackground 会被忽略，
+     所以不写这份的话，Android 12 以上看到的是系统默认样式（白底 + 被圆形裁切的应用图标）。 -->
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/brand_surface</item>
+        <!-- 透明底的图形 + 品牌色圆底：系统画圆，我们只给图形，不会被裁到 -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/brand_icon_bg</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/brand_surface</item>
+    </style>
+</resources>

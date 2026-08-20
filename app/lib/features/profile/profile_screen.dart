@@ -23,12 +23,11 @@ class ProfileScreen extends ConsumerWidget {
     // 角色控制：员工看不到 员工管理/导出/改店名（后端同样有权限拦截，这里只是不展示）
     final isAdmin = ref.watch(profileProvider).valueOrNull?['role'] == 'admin';
     return Scaffold(
-      appBar: AppBar(title: const Text('我的')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(kPagePadding, 8, kPagePadding, 120),
-        children: [
-          Text('我的', style: t.headlineLarge),
-          const SizedBox(height: 20),
+      body: CustomScrollView(slivers: [
+        const AppLargeTitleBar('我的'),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(kPagePadding, 0, kPagePadding, 120),
+          sliver: SliverList.list(children: [
           // ===== 账号卡：店名/用户名/角色 + 资料修改入口 =====
           Consumer(builder: (context, ref, _) {
             final profile = ref.watch(profileProvider);
@@ -55,25 +54,16 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ]),
                   const SizedBox(height: 14),
-                  Row(children: [
-                    if (u['role'] == 'admin') ...[
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _editShopName(context, ref, u['shopName'] ?? ''),
-                          icon: const Icon(Icons.storefront_outlined, size: 16),
-                          label: const Text('改店名', style: TextStyle(fontSize: 13)),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
+                  // 改密码已挪到「账号与安全」，这里只留店铺级设置
+                  if (u['role'] == 'admin')
+                    SizedBox(
+                      width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: () => _changePassword(context),
-                        icon: const Icon(Icons.lock_outline, size: 16),
-                        label: const Text('改密码', style: TextStyle(fontSize: 13)),
+                        onPressed: () => _editShopName(context, ref, u['shopName'] ?? ''),
+                        icon: const Icon(Icons.storefront_outlined, size: 16),
+                        label: const Text('改店名（票据抬头用这个）', style: TextStyle(fontSize: 13)),
                       ),
                     ),
-                  ]),
                 ]),
               ),
             );
@@ -82,7 +72,17 @@ class ProfileScreen extends ConsumerWidget {
           SoftCard(
             padding: EdgeInsets.zero,
             child: Column(children: [
+              // 订阅入口放老板区第一条：员工看不到也不该看到
+              if (isAdmin) ...[
+                _MenuTile(icon: Icons.auto_awesome, title: '专业版', onTap: () => context.push('/pro')),
+                const Divider(height: 1, indent: 56),
+              ],
               _MenuTile(icon: Icons.bar_chart_rounded, title: '报表中心', onTap: () => context.push('/reports')),
+              if (isAdmin) ...[
+                const Divider(height: 1, indent: 56),
+                // 收益日历和报表中心同级：报表回答"卖得怎么样"，日历回答"哪天进了多少钱"
+                _MenuTile(icon: Icons.calendar_month_rounded, title: '收益日历', onTap: () => context.push('/calendar')),
+              ],
               const Divider(height: 1, indent: 56),
               _MenuTile(icon: Icons.dashboard_customize_outlined, title: '品类管理', onTap: () => context.push('/types')),
               const Divider(height: 1, indent: 56),
@@ -124,89 +124,30 @@ class ProfileScreen extends ConsumerWidget {
               const Divider(height: 1, indent: 56),
               _MenuTile(icon: Icons.help_outline_rounded, title: '帮助与联系我们', onTap: () => openLegal(supportUrl)),
               const Divider(height: 1, indent: 56),
+              _MenuTile(icon: Icons.shield_outlined, title: '账号与安全', onTap: () => context.push('/account')),
+              const Divider(height: 1, indent: 56),
               _MenuTile(icon: Icons.info_outline_rounded, title: '关于智存', onTap: () => context.push('/about')),
             ]),
           ),
           const SizedBox(height: 16),
           SoftCard(
             padding: EdgeInsets.zero,
-            child: Column(children: [
-              _MenuTile(
-                icon: Icons.logout_rounded,
-                title: '退出登录',
-                color: AppColors.error,
-                onTap: () => ref.read(authProvider.notifier).logout(),
-              ),
-              const Divider(height: 1, indent: 56),
-              // App Store 5.1.1(v)：有注册就必须能在 app 内删号
-              _MenuTile(
-                icon: Icons.delete_forever_outlined,
-                title: '删除账号',
-                color: AppColors.error,
-                onTap: () => _deleteAccount(context, ref),
-              ),
-            ]),
+            // 只放退出登录。删除账号是不可逆操作，绝不能和高频的"退出登录"并排——
+            // 手指一滑就点错，后果是全部经营数据没了。它在「账号与安全」里（我的→账号与安全）
+            child: _MenuTile(
+              icon: Icons.logout_rounded,
+              title: '退出登录',
+              color: AppColors.error,
+              onTap: () => ref.read(authProvider.notifier).logout(),
+            ),
           ),
-        ],
-      ),
+          ]),
+        ),
+      ]),
     );
   }
 
   /// 删除账号：两步确认（说明后果 → 手输「删除」），成功后清 token 回登录页
-  Future<void> _deleteAccount(BuildContext context, WidgetRef ref) async {
-    final sure = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: const Text('删除账号'),
-        content: const Text('删除后无法恢复：\n\n'
-            '· 你的账号信息（用户名、姓名、手机、Apple 登录绑定）将被永久清除\n'
-            '· 若你是店里唯一的账号，商品、订单、客户、报表等全部经营数据将一并永久删除\n'
-            '· 若店里还有其他账号，经营单据保留，但不再关联到你\n\n'
-            '建议先在「导出全部数据」备份。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('取消')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(dctx, true),
-            child: const Text('继续删除'),
-          ),
-        ],
-      ),
-    );
-    if (sure != true || !context.mounted) return;
-
-    final input = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: const Text('最后确认'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('请输入「删除」两个字确认：'),
-          const SizedBox(height: 12),
-          TextField(controller: input, autofocus: true, decoration: const InputDecoration(hintText: '删除')),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('取消')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(dctx, input.text.trim() == '删除'),
-            child: const Text('永久删除'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    try {
-      await Api.I.post('/auth/delete-account');
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('账号已删除')));
-      ref.read(authProvider.notifier).logout();
-    } on ApiError catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败：${e.message}')));
-    }
-  }
 
   /// 改店名（店铺级设置：员工开单的票据抬头也用这个）
   Future<void> _editShopName(BuildContext context, WidgetRef ref, String current) async {
@@ -215,7 +156,7 @@ class ProfileScreen extends ConsumerWidget {
       context: context,
       builder: (dctx) => AlertDialog(
         title: const Text('修改店名'),
-        content: TextField(controller: name, autofocus: true, decoration: const InputDecoration(hintText: '店名（票据抬头用）')),
+        content: TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: '店名（票据抬头用）')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('取消')),
           TextButton(onPressed: () => Navigator.pop(dctx, true), child: const Text('保存')),
@@ -232,44 +173,6 @@ class ProfileScreen extends ConsumerWidget {
     }
   }
 
-  /// 改密码
-  Future<void> _changePassword(BuildContext context) async {
-    final oldPwd = TextEditingController();
-    final newPwd = TextEditingController();
-    final confirm = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: const Text('修改密码'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: oldPwd, obscureText: true, decoration: const InputDecoration(hintText: '原密码')),
-          const SizedBox(height: 10),
-          TextField(controller: newPwd, obscureText: true, decoration: const InputDecoration(hintText: '新密码（至少6位）')),
-          const SizedBox(height: 10),
-          TextField(controller: confirm, obscureText: true, decoration: const InputDecoration(hintText: '确认新密码')),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(dctx, true), child: const Text('确定')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    if (newPwd.text.length < 6) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('新密码至少 6 位')));
-      return;
-    }
-    if (newPwd.text != confirm.text) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('两次新密码不一致')));
-      return;
-    }
-    try {
-      await Api.I.put('/auth/password', data: {'oldPassword': oldPwd.text, 'newPassword': newPwd.text});
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✓ 密码已修改')));
-    } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
 
   /// 数据导出：Excel表格(CSV,人看的) / JSON(完整备份,迁移用)
   Future<void> _exportAll(BuildContext context) async {
@@ -438,9 +341,9 @@ class ProfileScreen extends ConsumerWidget {
                         builder: (dctx) => AlertDialog(
                           title: const Text('新供应商'),
                           content: Column(mainAxisSize: MainAxisSize.min, children: [
-                            TextField(controller: name, decoration: const InputDecoration(hintText: '供应商名称')),
+                            TextField(controller: name, decoration: const InputDecoration(labelText: '供应商名称')),
                             const SizedBox(height: 10),
-                            TextField(controller: phone, decoration: const InputDecoration(hintText: '电话（选填）')),
+                            TextField(controller: phone, decoration: const InputDecoration(labelText: '电话（选填）')),
                           ]),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('取消')),

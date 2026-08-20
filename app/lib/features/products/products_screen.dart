@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api.dart';
@@ -31,6 +32,10 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
       if (_scrollCtl.position.pixels >= _scrollCtl.position.maxScrollExtent - 320) {
         ref.read(productListProvider(_currentQuery).notifier).loadMore();
       }
+      // 往下翻的时候把 + 按钮收起来。它固定在右下角，而每张卡的库存数字也贴右边缘，
+      // 不收起就会一路挡着人看库存——而往下翻的时候本来也不是要新建商品。
+      final fab = _scrollCtl.position.userScrollDirection != ScrollDirection.reverse;
+      if (fab != _fabVisible) setState(() => _fabVisible = fab);
     });
   }
 
@@ -41,6 +46,8 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     _scrollCtl.dispose();
     super.dispose();
   }
+
+  bool _fabVisible = true;
 
   ProductQuery get _currentQuery => ProductQuery(typeId: _typeFilter, keyword: _query);
 
@@ -65,24 +72,32 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     final products = ref.watch(productListProvider(_currentQuery));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('商品库存')),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.primary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        onPressed: () async {
-          await context.push('/products/new');
-          ref.read(productListProvider(_currentQuery).notifier).refresh();
-        },
-        child: const Icon(Icons.add_rounded, color: Colors.white),
+      // 不再单独摆 AppBar：空标题的 AppBar 照样占满 56pt，加上正文大标题，
+      // 顶上白白吃掉 120 多 pt。SliverAppBar.medium 让大标题直接长在 AppBar 里，
+      // 往下滚自己缩成普通标题栏——一层解决"重复"和"留白"两件事。
+      floatingActionButton: AnimatedScale(
+        scale: _fabVisible ? 1 : 0,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        child: FloatingActionButton(
+          backgroundColor: AppColors.primary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          onPressed: () async {
+            await context.push('/products/new');
+            ref.read(productListProvider(_currentQuery).notifier).refresh();
+          },
+          child: const Icon(Icons.add_rounded, color: Colors.white),
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(productListProvider(_currentQuery).notifier).refresh(),
-        child: ListView(
+        child: CustomScrollView(
           controller: _scrollCtl,
-          padding: const EdgeInsets.fromLTRB(kPagePadding, 8, kPagePadding, 120),
-          children: [
-            Text('商品库存', style: t.headlineLarge),
-            const SizedBox(height: 16),
+          slivers: [
+            const AppLargeTitleBar('商品库存'),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(kPagePadding, 0, kPagePadding, 120),
+              sliver: SliverList.list(children: [
             // 搜索：名称/编码/条码/规格
             TextField(
               controller: _searchCtl,
@@ -168,6 +183,8 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                   ),
                 ]);
               },
+            ),
+              ]),
             ),
           ],
         ),
@@ -277,34 +294,42 @@ class _ProductCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context).textTheme;
+    // 三档库存状态，优先级：卖超了 > 缺货 > 正常。
+    // 负库存单独一档，因为它不是"少"而是"账不对"，得让人一眼看见。
+    final negative = product.hasNegativeStock;
+    final alert = negative || product.isLow;
+    final stockLabel = negative ? '卖超了' : (product.isLow ? '有规格缺货' : '总库存');
+
+    // 元信息合成一行灰字：规格数 · 起价（或 单价/单位 · 编码）。
+    // 以前散成两三行，把卡片撑高，头像和库存块跟着往下掉，跟标题错位。
+    final meta = product.hasSpecs
+        ? '${product.skus.length}个规格 · ¥${product.skus.map((s) => s.price).reduce((a, b) => a < b ? a : b)}起'
+        : '¥${product.defaultPrice} / ${product.unit} · 编码 ${product.code}';
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: SoftCard(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         onTap: () => context.push('/products/${product.id}'), // 看货页；编辑在详情页右上角
         child: Row(
+          // 顶对齐：卡片高度随内容变，居中会让头像和库存块相对标题往下沉
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 统一用 ProductThumb：没图也占同样的位，列表左边缘才对得齐
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: ProductThumb(imageUrl: product.imageUrl, name: product.name, size: 52),
-            ),
+            ProductThumb(imageUrl: product.imageUrl, name: product.name, size: 48),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Flexible(child: Text(product.name, style: t.titleMedium, overflow: TextOverflow.ellipsis)),
-                    const SizedBox(width: 8),
-                    if (product.productType != null) Chip(label: Text(product.productType!.name)),
+                    Flexible(child: Text(product.name, style: t.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    if (product.productType != null) ...[
+                      const SizedBox(width: 6),
+                      _tag(product.productType!.name),
+                    ],
                   ]),
-                  const SizedBox(height: 4),
-                  Text(
-                    product.hasSpecs
-                        ? '${product.skus.length}个规格 · ¥${product.skus.map((s) => s.price).reduce((a, b) => a < b ? a : b)}起'
-                        : '¥${product.defaultPrice} / ${product.unit} · 编码 ${product.code}',
-                    style: t.bodyMedium?.copyWith(fontSize: 12),
-                  ),
+                  const SizedBox(height: 3),
+                  Text(meta, style: t.bodyMedium?.copyWith(fontSize: 12)),
                   // 药店的"999感冒灵"和"同仁堂感冒灵"全靠这行区分（字段设置里勾"列表显示"）
                   Consumer(builder: (context, ref, _) {
                     final types = ref.watch(typesProvider).valueOrNull;
@@ -320,48 +345,55 @@ class _ProductCard extends ConsumerWidget {
                       child: Text(parts.join(' · '), style: const TextStyle(fontSize: 11, color: AppColors.primary)),
                     );
                   }),
-                  if (product.hasSpecs)
+                  // 只有真的多规格才逐个铺开。单规格时右边的"总库存"已经把话说完了，
+                  // 再来一个"库存-5"的 chip 就是同一个数字说两遍。
+                  if (product.skus.length > 1)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Wrap(
                         spacing: 6,
                         runSpacing: 4,
                         children: [
-                          for (final s in product.skus.take(3))
-                            Chip(label: Text('${s.displayName}  库存${fmtQty(s.stock)}')),
-                          if (product.skus.length > 3) Chip(label: Text('还有${product.skus.length - 3}个规格')),
+                          for (final sk in product.skus.take(3))
+                            _tag('${sk.displayName} ${fmtQty(sk.stock)}', warn: sk.stock < 0),
+                          if (product.skus.length > 3) _tag('还有${product.skus.length - 3}个'),
                         ],
                       ),
                     ),
                 ],
               ),
             ),
+            const SizedBox(width: 10),
             // 点库存数字 → 快捷调库存（不用进编辑页）
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => _quickAdjustStock(context, ref, product),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                constraints: const BoxConstraints(minWidth: 62),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
-                  color: product.isLow ? const Color(0xFFFDECEC) : AppColors.surfaceContainer,
+                  color: alert ? const Color(0xFFFDECEC) : AppColors.surfaceContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(mainAxisSize: MainAxisSize.min, children: [
                       Text(
                         fmtQty(product.totalStock),
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 19,
                           fontWeight: FontWeight.w800,
-                          color: product.isLow ? AppColors.error : AppColors.onSurface,
+                          color: alert ? AppColors.error : AppColors.onSurface,
                         ),
                       ),
                       const SizedBox(width: 3),
-                      const Icon(Icons.edit_rounded, size: 13, color: AppColors.onSurfaceVariant),
+                      Icon(Icons.edit_rounded, size: 12, color: alert ? AppColors.error : AppColors.onSurfaceVariant),
                     ]),
-                    Text(product.isLow ? '有规格缺货' : '总库存', style: TextStyle(fontSize: 10, color: product.isLow ? AppColors.error : AppColors.onSurfaceVariant)),
+                    const SizedBox(height: 1),
+                    Text(stockLabel,
+                        style: TextStyle(fontSize: 10, color: alert ? AppColors.error : AppColors.onSurfaceVariant)),
                   ],
                 ),
               ),
@@ -369,6 +401,20 @@ class _ProductCard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// 比 Chip 紧凑一截的小标签。默认 Chip 自带 8px 上下留白，
+  /// 一张卡里放三四个就把行高撑散了。
+  Widget _tag(String text, {bool warn = false}) {
+    final c = warn ? AppColors.error : AppColors.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: c)),
     );
   }
 }

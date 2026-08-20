@@ -197,9 +197,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
       builder: (dctx) => AlertDialog(
         title: const Text('新客户'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: name, autofocus: true, decoration: const InputDecoration(hintText: '客户名称')),
+          TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: '客户名称')),
           const SizedBox(height: 10),
-          TextField(controller: phone, decoration: const InputDecoration(hintText: '电话（选填）')),
+          TextField(controller: phone, decoration: const InputDecoration(labelText: '电话（选填）')),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('取消')),
@@ -222,73 +222,15 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   }
 
   Future<void> _pickCustomer() async {
-    final customers = await ref.read(customersProvider.future);
-    if (!mounted) return;
+    // 先弹窗，再在弹窗里加载客户列表。
+    // 以前是「先 await 客户列表、成功了才弹窗」，两个后果：网一慢点了就像没反应，
+    // 接口一报错更是彻底没动静（这段没有 try/catch）——用户会以为压根没这功能。
+    // 现在无论网络怎么样，点一下必定弹窗，散客和新建客户永远可用。
     // null = 散客（不是"没选"，是明确的"零售不记名"）
     final picked = await showModalBottomSheet<Object?>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) {
-        String q = '';
-        return StatefulBuilder(builder: (ctx, setModal) {
-          final list = q.trim().isEmpty
-              ? customers
-              : customers
-                  .where((c) => c.name.contains(q.trim()) || (c.phone ?? '').contains(q.trim()))
-                  .toList();
-          return SafeArea(
-            child: SizedBox(
-              height: MediaQuery.of(ctx).size.height * 0.7,
-              child: Column(children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                  child: Column(children: [
-                    Align(alignment: Alignment.centerLeft, child: Text('卖给谁？', style: Theme.of(ctx).textTheme.headlineMedium)),
-                    const SizedBox(height: 10),
-                    if (customers.length > 6)
-                      TextField(
-                        onChanged: (v) => setModal(() => q = v),
-                        decoration: InputDecoration(
-                          hintText: '搜客户名 / 电话',
-                          prefixIcon: const Icon(Icons.search_rounded, color: AppColors.onSurfaceVariant),
-                          isDense: true,
-                          filled: true,
-                          fillColor: AppColors.surfaceContainer,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                        ),
-                      ),
-                  ]),
-                ),
-                Expanded(
-                  child: ListView(padding: const EdgeInsets.fromLTRB(20, 4, 20, 20), children: [
-                    ListTile(
-                      leading: const Icon(Icons.person_outline_rounded, color: AppColors.primary),
-                      title: const Text('散客（不记名）', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: const Text('一手交钱一手交货，不用建档案', style: TextStyle(fontSize: 12)),
-                      onTap: () => Navigator.pop(ctx, 'walkin'),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary),
-                      title: const Text('新建客户', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
-                      onTap: () => Navigator.pop(ctx, 'new'),
-                    ),
-                    const Divider(height: 1),
-                    for (final c in list)
-                      ListTile(
-                        title: Text(c.name),
-                        subtitle: c.phone == null ? null : Text(c.phone!),
-                        onTap: () => Navigator.pop(ctx, c),
-                      ),
-                    if (list.isEmpty && customers.isNotEmpty)
-                      const Padding(padding: EdgeInsets.all(20), child: Text('没有匹配的客户')),
-                  ]),
-                ),
-              ]),
-            ),
-          );
-        });
-      },
+      builder: (ctx) => _CustomerPickerSheet(selectedId: _customer?.id),
     );
 
     if (picked == null) return;
@@ -308,29 +250,57 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     setState(() => _customer = target);
     // 重新解析购物车价格（客户专属价按 SKU）
     for (final item in _cart) {
-      final data = await Api.I.get('/pricing/resolve', query: {'customerId': target.id, 'skuId': item.sku.id});
-      if (!mounted) return;
-      setState(() {
-        item.unitPrice = (data['price'] as num).toDouble();
-        item.priceSource = data['source'];
-      });
+      try {
+        final data = await Api.I.get('/pricing/resolve', query: {'customerId': target.id, 'skuId': item.sku.id});
+        if (!mounted) return;
+        setState(() {
+          item.unitPrice = (data['price'] as num).toDouble();
+          item.priceSource = data['source'];
+        });
+      } catch (_) {
+        // 单行价格解析失败不该中断整个流程：保留原价，用户可以点行手动改
+      }
     }
   }
 
   Future<void> _addProduct() async {
     final customerTypeId = _customer?.productTypeId;
-    final all = await ref.read(productsProvider(null).future);
-    final types = await ref.read(typesProvider.future);
+    // 选货弹窗离不开商品列表，所以只能先取数。但取数失败必须让用户看见——
+    // 以前这里没有 try/catch，一失败就是「点了添加商品毫无反应」，跟按钮坏了没区别。
+    final List<Product> all;
+    final List<ProductType> types;
+    try {
+      all = await ref.read(productsProvider(null).future);
+      types = await ref.read(typesProvider.future);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('商品列表没加载出来，检查下网络'),
+        action: SnackBarAction(
+          label: '重试',
+          onPressed: () {
+            ref.invalidate(productsProvider(null));
+            ref.invalidate(typesProvider);
+            _addProduct();
+          },
+        ),
+      ));
+      return;
+    }
     final mainTypeId = ref.read(mainTypeIdProvider);
     if (!mounted) return;
+    // 弹窗内的筛选状态必须放在 builder **外面**。
+    // 放里面的话，键盘弹起来（viewInsets 变化）会让 showModalBottomSheet 重跑 builder，
+    // 这几个变量当场被重置回初值——用户看到的是"输入框里有字，列表却没过滤"，
+    // 而且是打字打到一半才发生，极难自查。2026-08-16 被集成测试逮到。
+    bool onlyCustomerType = customerTypeId != null;
+    String query = '';
+    // 客户没定主营品类时，默认落在店铺主营品类
+    int? typeFilter = customerTypeId == null ? mainTypeId : null;
     final picked = await showModalBottomSheet<Object>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
-        bool onlyCustomerType = customerTypeId != null;
-        String query = '';
-        // 客户没定主营品类时，默认落在店铺主营品类
-        int? typeFilter = customerTypeId == null ? mainTypeId : null;
         return StatefulBuilder(
           builder: (ctx, setModal) {
             var products = onlyCustomerType ? all.where((p) => p.productTypeId == customerTypeId).toList() : all;
@@ -604,12 +574,12 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
               const SizedBox(height: 4),
               Text('先建档开单，详细信息之后可在商品页补', style: Theme.of(ctx).textTheme.bodyMedium),
               const SizedBox(height: 16),
-              TextField(controller: name, autofocus: true, decoration: const InputDecoration(hintText: '商品名称 *')),
+              TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: '商品名称 *')),
               const SizedBox(height: 12),
               Row(children: [
-                Expanded(child: TextField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '售价 ¥ *'))),
+                Expanded(child: TextField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '售价 ¥ *'))),
                 const SizedBox(width: 12),
-                Expanded(child: TextField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '现有库存 *'))),
+                Expanded(child: TextField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '现有库存 *'))),
               ]),
               const SizedBox(height: 12),
               Wrap(spacing: 8, runSpacing: 8, children: [
@@ -697,7 +667,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                 child: TextField(
                   controller: qtyCtl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(hintText: '数量（${item.product.unit}）'),
+                  decoration: InputDecoration(labelText: '数量（${item.product.unit}）'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -706,7 +676,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                   controller: priceCtl,
                   autofocus: true,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(hintText: '单价 ¥'),
+                  decoration: const InputDecoration(labelText: '单价 ¥'),
                 ),
               ),
             ]),
@@ -951,9 +921,22 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
               ),
             ),
           Row(children: [
-            Expanded(child: OutlinedButton.icon(onPressed: _addProduct, icon: const Icon(Icons.add), label: const Text('添加商品'))),
+            // FittedBox：系统字号调大时文字缩小而不是换行，两个按钮高度不会一高一低
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _addProduct,
+                icon: const Icon(Icons.add),
+                label: const FittedBox(fit: BoxFit.scaleDown, child: Text('添加商品', maxLines: 1)),
+              ),
+            ),
             const SizedBox(width: 10),
-            Expanded(child: OutlinedButton.icon(onPressed: _scanAdd, icon: const Icon(Icons.qr_code_scanner_rounded, size: 18), label: const Text('扫码加货'))),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _scanAdd,
+                icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                label: const FittedBox(fit: BoxFit.scaleDown, child: Text('扫码加货', maxLines: 1)),
+              ),
+            ),
           ]),
           // ===== 结算区：折扣 / 实收 / 结算账户 =====
           if (_cart.isNotEmpty) ...[
@@ -965,7 +948,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                 child: TextField(
                   controller: _discountRate,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(hintText: '折扣（如95=95折）'),
+                  decoration: const InputDecoration(labelText: '折扣（如95=95折）'),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
@@ -974,7 +957,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                 child: TextField(
                   controller: _paid,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(hintText: '实收 ¥（默认 ${_actual.toStringAsFixed(2)}）'),
+                  // 标签只留字段名，动态默认值放 hint——否则浮起来的标签又长又跳
+                  decoration: InputDecoration(labelText: '实收 ¥', hintText: '默认 ${_actual.toStringAsFixed(2)}'),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
@@ -1001,6 +985,193 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// 客户选择弹窗：立刻弹出，客户列表在弹窗里异步加载。
+///
+/// 关键约束：「散客」和「新建客户」必须在列表加载完成之前就能点。
+/// 开单是柜台前的动作，网卡了不能把人堵在这儿——散客本来就不需要任何数据，
+/// 新建客户也只需要一个输入框。列表加载失败给明确提示 + 重试，绝不静默。
+class _CustomerPickerSheet extends ConsumerStatefulWidget {
+  final int? selectedId; // 当前已选客户，在列表里高亮出来
+  const _CustomerPickerSheet({this.selectedId});
+
+  @override
+  ConsumerState<_CustomerPickerSheet> createState() => _CustomerPickerSheetState();
+}
+
+class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
+  List<Customer>? _customers;
+  Object? _error;
+  String _q = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _error = null;
+      _customers = null;
+    });
+    try {
+      final list = await ref.read(customersProvider.future);
+      if (mounted) setState(() => _customers = list);
+    } catch (e) {
+      if (mounted) setState(() => _error = e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final all = _customers ?? const <Customer>[];
+    final list = _q.trim().isEmpty
+        ? all
+        : all.where((c) => c.name.contains(_q.trim()) || (c.phone ?? '').contains(_q.trim())).toList();
+
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Column(children: [
+              Align(alignment: Alignment.centerLeft, child: Text('卖给谁？', style: Theme.of(context).textTheme.headlineMedium)),
+              const SizedBox(height: 10),
+              if (all.length > 6)
+                TextField(
+                  onChanged: (v) => setState(() => _q = v),
+                  decoration: InputDecoration(
+                    hintText: '搜客户名 / 电话',
+                    prefixIcon: const Icon(Icons.search_rounded, color: AppColors.onSurfaceVariant),
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppColors.surfaceContainer,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                  ),
+                ),
+            ]),
+          ),
+          Expanded(
+            child: ListView(padding: const EdgeInsets.fromLTRB(20, 4, 20, 20), children: [
+              // 这两条不依赖任何网络数据，永远第一时间可点
+              ListTile(
+                leading: const Icon(Icons.person_outline_rounded, color: AppColors.primary),
+                title: const Text('散客（不记名）', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('一手交钱一手交货，不用建档案', style: TextStyle(fontSize: 12)),
+                onTap: () => Navigator.pop(context, 'walkin'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary),
+                title: const Text('新建客户', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                onTap: () => Navigator.pop(context, 'new'),
+              ),
+              const Divider(height: 1),
+              if (_customers == null && _error == null)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Column(children: [
+                    const Icon(Icons.cloud_off_rounded, color: AppColors.outlineVariant, size: 32),
+                    const SizedBox(height: 8),
+                    const Text('老客户列表没加载出来', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    const Text('可以先按散客开单，或直接新建客户', style: TextStyle(fontSize: 12)),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: const Text('重试'),
+                    ),
+                  ]),
+                )
+              else ...[
+                if (list.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
+                    child: Text('老客户 · ${list.length}',
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.onSurfaceVariant)),
+                  ),
+                for (var i = 0; i < list.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, indent: 56),
+                  _customerRow(list[i]),
+                ],
+                if (list.isEmpty && all.isNotEmpty)
+                  const Padding(padding: EdgeInsets.all(20), child: Text('没有匹配的客户')),
+                if (all.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Text('还没有老客户档案，点上面「新建客户」建第一个', style: TextStyle(fontSize: 12)),
+                  ),
+              ],
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  /// 单个客户行：首字头像 + 名字 + 电话，右边挂欠款。
+  /// 欠款放右边是因为开单前老板最先想知道的就是"这人还欠我多少"——
+  /// 挂着账还继续赊，是批发户最容易吃亏的地方。
+  Widget _customerRow(Customer c) {
+    final selected = c.id == widget.selectedId;
+    final owed = c.owed;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : AppColors.primaryFixed,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          c.name.isEmpty ? '?' : c.name.characters.first,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: selected ? Colors.white : AppColors.primary,
+          ),
+        ),
+      ),
+      title: Row(children: [
+        Flexible(
+          child: Text(
+            c.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: selected ? AppColors.primary : AppColors.onSurface,
+            ),
+          ),
+        ),
+        if (selected) ...[
+          const SizedBox(width: 6),
+          const Icon(Icons.check_circle_rounded, size: 16, color: AppColors.primary),
+        ],
+      ]),
+      subtitle: c.phone == null ? null : Text(c.phone!, style: const TextStyle(fontSize: 12)),
+      trailing: owed <= 0
+          ? null
+          : Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('欠 ¥${owed.toStringAsFixed(owed % 1 == 0 ? 0 : 2)}',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.error)),
+              if (c.unpaidCount > 0)
+                Text('${c.unpaidCount} 笔未结', style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceVariant)),
+            ]),
+      onTap: () => Navigator.pop(context, c),
     );
   }
 }

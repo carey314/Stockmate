@@ -23,7 +23,7 @@ const { currentPlan, recordAiUsage, dailyAiCalls, PLAN_FREE } = require('../util
 const CORE = new Set(['parse-entry', 'confirm-entry']);
 const bucketOf = (endpoint) => (CORE.has(endpoint) ? 'core' : 'other');
 
-const num = (name) => Number(process.env[name]) || 0;
+const num = (name, fallback = 0) => Number(process.env[name]) || fallback;
 
 const aiMeter = (endpoint) => async (req, res, next) => {
   const bucket = bucketOf(endpoint);
@@ -32,6 +32,16 @@ const aiMeter = (endpoint) => async (req, res, next) => {
   if (limit > 0) {
     try {
       const { plan } = await currentPlan();
+      if (plan !== PLAN_FREE) {
+        // 付费版也要有天花板：订阅页写的是"不限次（每天 100 次防滥用上限）"，
+        // 真做成无限的话，一个被盗号或写脚本的用户就能把 AI 账单刷爆。
+        // 这个上限远高于任何真实店铺的用量，正常用户一辈子撞不到。
+        const proLimit = bucket === 'core' ? num('PRO_AI_DAILY_CORE', 100) : num('PRO_AI_DAILY_OTHER', 50);
+        const usedPro = await dailyAiCalls(bucket);
+        if (proLimit > 0 && usedPro >= proLimit) {
+          return fail(res, 429, `今天的 AI 调用已达上限（${usedPro}/${proLimit}），明天 0 点恢复。正常记账用不到这个量，如果你确实需要更多，通过帮助页联系我们。`);
+        }
+      }
       if (plan === PLAN_FREE) {
         const used = await dailyAiCalls(bucket);
         if (used >= limit) {

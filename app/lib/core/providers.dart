@@ -239,3 +239,11 @@ final suppliersProvider = FutureProvider<List<Supplier>>((ref) async {
   final all = await _cachedList('suppliers', () => _fetchAllPages('/suppliers'));
   return all.map((x) => Supplier.fromJson(x)).toList();
 });
+
+/// 权益 + 今日 AI 额度。口述页拿它显示"今天还剩 N 次"——
+/// 让用户对额度**始终有感知**，而不是用到第 9 次突然撞墙。
+/// coreLimit/otherLimit 为 null = 不限（付费版或未配置额度）。
+final entitlementProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final d = await Api.I.get('/me/entitlement');
+  return Map<String, dynamic>.from(d);
+});

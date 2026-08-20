@@ -175,6 +175,10 @@ class Product {
   });
 
   bool get isLow => skus.any((s) => s.isLow);
+  /// 有规格卖成了负数 = 账实不符（卖超了，或进货没录）。
+  /// 这比"低于最低库存"更该报警：isLow 依赖 minQuantity>0，而大部分商品根本没设，
+  /// 于是库存 -5 也会被判成正常——负库存必须单独判。
+  bool get hasNegativeStock => skus.any((s) => s.stock < 0);
   bool get hasSpecs => skus.length > 1 || (skus.length == 1 && skus.first.specText.isNotEmpty);
   Sku? get defaultSku => skus.isEmpty ? null : skus.firstWhere((s) => s.isDefault, orElse: () => skus.first);
 
@@ -370,6 +374,7 @@ class ParsedItem {
   String? matchedProductName;
   int? productTypeId; // 新建商品归属品类（AI 建议预填，用户可改）
   String? productTypeName;
+  bool createProduct = true; // 没档案时默认顺便建档并入库，可取消
 
   ParsedItem({
     required this.name,
@@ -465,6 +470,15 @@ class ParsedSale {
     this.skuId,
     this.paid,
   });
+
+  /// 确认时顺便把这个没档案的商品建进来（并真扣库存）
+  bool createProduct = false;
+  int? productTypeId; // 建到哪个品类
+
+  /// 是不是"记名客户"——决定没说收款时按哪种默认。
+  /// 必须排除内置的「散客」档案：AI 会把口述里的"散客"二字匹配到那条客户记录，
+  /// customerId 非空但它并不是真的记名客户，不排掉就会把标签显示错。
+  bool get isNamedCustomer => customerId != null && customerName != '散客';
 
   SaleSkuOption? get chosenSku => skuOptions.where((s) => s.id == skuId).firstOrNull;
   bool get stockInsufficient => chosenSku != null && quantity > chosenSku!.stock;

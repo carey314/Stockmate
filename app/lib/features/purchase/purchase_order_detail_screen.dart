@@ -35,6 +35,51 @@ class _PurchaseOrderDetailScreenState extends ConsumerState<PurchaseOrderDetailS
     _load();
   }
 
+
+  /// 作废整张进货单：入库的货退出去、付过的钱生成收回流水，不可恢复。
+  /// 同订单详情——破坏性操作放右上角菜单，不跟高频动作并排。
+  Future<void> _cancelPo() async {
+    final o = _po;
+    if (o == null) return;
+    final paid = ((o['paidAmount'] ?? 0) as num).toDouble();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('作废这张进货单？'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('单号 ${o['orderNo']}'),
+          const SizedBox(height: 10),
+          const Text('· 这批货会从库存里扣回去', style: TextStyle(fontSize: 13)),
+          if (paid > 0.001)
+            Text('· 已付的 ¥${_money.format(paid)} 会记一笔收回流水（钱要真找供应商要回来）',
+                style: const TextStyle(fontSize: 13, color: AppColors.error)),
+          const SizedBox(height: 8),
+          const Text('作废后不能恢复。', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('再想想')),
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            child: const Text('确认作废', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await Api.I.put('/purchase-orders/${widget.poId}/cancel');
+      invalidateProducts(ref);
+      ref.invalidate(overviewProvider);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('✓ 已作废，库存已扣回${paid > 0.001 ? '，应向供应商收回 ¥${_money.format(paid)}' : ''}')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('作废失败：$e')));
+    }
+  }
+
   Future<void> _load() async {
     try {
       final data = await Api.I.get('/purchase-orders/${widget.poId}');
@@ -85,7 +130,7 @@ class _PurchaseOrderDetailScreenState extends ConsumerState<PurchaseOrderDetailS
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('付欠款（欠 ¥${_money.format(unpaid)}）', style: Theme.of(ctx).textTheme.headlineMedium),
             const SizedBox(height: 16),
-            TextField(controller: amount, autofocus: true, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '付款金额 ¥')),
+            TextField(controller: amount, autofocus: true, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '付款金额 ¥')),
             const SizedBox(height: 12),
             Wrap(spacing: 8, children: [
               for (final a in ['现金', '微信', '支付宝', '银行卡'])
@@ -182,7 +227,22 @@ class _PurchaseOrderDetailScreenState extends ConsumerState<PurchaseOrderDetailS
     final o = _po;
     final unpaid = o == null ? 0.0 : (o['unpaidAmount'] ?? 0).toDouble();
     return Scaffold(
-      appBar: AppBar(title: Text(o?['orderNo'] ?? '进货单')),
+      appBar: AppBar(
+        title: Text(o?['orderNo'] ?? '进货单'),
+        actions: [
+          if (o != null && o['status'] == 'completed')
+            PopupMenuButton<String>(
+              tooltip: '更多',
+              onSelected: (v) { if (v == 'cancel') _cancelPo(); },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'cancel',
+                  child: Text('作废这张单', style: TextStyle(color: AppColors.error)),
+                ),
+              ],
+            ),
+        ],
+      ),
       bottomNavigationBar: o == null
           ? null
           : SafeArea(

@@ -37,11 +37,13 @@ class _InventoryMoveScreenState extends ConsumerState<InventoryMoveScreen> {
     final all = await ref.read(productsProvider(null).future);
     final mainTypeId = ref.read(mainTypeIdProvider);
     if (!mounted) return;
+    // 弹窗筛选状态必须放在 builder 外面：键盘弹起会让 showModalBottomSheet 重跑 builder，
+    // 放里面的变量当场被重置——表现是"输入框有字、列表却没过滤"。同 order_create_screen。
+    String q = '';
     final picked = await showModalBottomSheet<(Product, Sku)>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
-        String q = '';
         return StatefulBuilder(builder: (ctx, setModal) {
           var products = all.where((p) => p.matches(q)).toList();
           // 主营品类排前面

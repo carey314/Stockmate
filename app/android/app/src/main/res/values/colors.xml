@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 与 app/lib/core/theme.dart 的 AppColors 保持一致，改一处要同步另一处 -->
+<resources>
+    <color name="brand_surface">#FAF8FF</color>   <!-- scaffoldBackgroundColor，启动页底色用它才不闪白 -->
+    <color name="brand_primary">#4648D4</color>
+    <color name="brand_icon_bg">#4B4DDB</color>   <!-- 图标渐变的中间值，Android 12 splash 圆底用 -->
+</resources>

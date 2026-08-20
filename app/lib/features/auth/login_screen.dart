@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/legal.dart';
 import '../../core/providers.dart';
@@ -68,6 +69,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  /// 忘记密码：这个 App 没有自助重置（没有短信/邮件通道），所以只能把三条路说清楚，
+  /// 别让人在登录页反复试密码。文案与 Web 端一字不差。
+  void _showForgotPassword() {
+    showDialog<void>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('忘记密码？'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('① 员工账号', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          const Text('请店主在「设置→员工管理→重置密码」帮你重置（App 和网页后台都能操作）',
+              style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 12),
+          const Text('② 店主账号', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          const Text('通过帮助页 qxju.shop/stockmate/support 联系我们，附店名+注册用户名，人工核实后重置',
+              style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 12),
+          const Text('③ 用 Apple 登录的账号', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          const Text('不需要密码', style: TextStyle(fontSize: 13)),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () => launchUrl(Uri.parse(supportUrl), mode: LaunchMode.externalApplication),
+            child: const Text('打开帮助页'),
+          ),
+          TextButton(onPressed: () => Navigator.pop(dctx), child: const Text('知道了')),
+        ],
+      ),
+    );
+  }
+
   /// Sign in with Apple（iOS 系统账号一键登录）
   Future<void> _appleLogin() async {
     if (_loading) return;
@@ -121,13 +155,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const Spacer(),
               TextField(
                 controller: _username,
-                decoration: const InputDecoration(hintText: '用户名'),
+                decoration: const InputDecoration(labelText: '用户名'),
                 textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 14),
               TextField(
                 controller: _password,
-                decoration: const InputDecoration(hintText: '密码（至少 6 位）'),
+                decoration: const InputDecoration(labelText: '密码（至少 6 位）'),
                 obscureText: true,
                 textInputAction: _isRegister ? TextInputAction.next : TextInputAction.done,
                 onSubmitted: (_) => _isRegister ? null : _submit(),
@@ -137,14 +171,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 14),
                 TextField(
                   controller: _confirm,
-                  decoration: const InputDecoration(hintText: '确认密码'),
+                  decoration: const InputDecoration(labelText: '确认密码'),
                   obscureText: true,
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: _realName,
-                  decoration: const InputDecoration(hintText: '店名/称呼（选填）'),
+                  decoration: const InputDecoration(labelText: '店名/称呼（选填）'),
                   onSubmitted: (_) => _submit(),
                 ),
               ],
@@ -156,12 +190,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     : Text(_isRegister ? '注册并开始使用' : '登录'),
               ),
               const SizedBox(height: 10),
-              Center(
-                child: TextButton(
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                TextButton(
                   onPressed: () => setState(() => _isRegister = !_isRegister),
                   child: Text(_isRegister ? '已有账号？去登录' : '没有账号？注册一个', style: const TextStyle(fontSize: 14)),
                 ),
-              ),
+                // 登录模式才给：注册的时候问"忘记密码"没有意义
+                if (!_isRegister)
+                  TextButton(
+                    onPressed: _showForgotPassword,
+                    child: const Text('忘记密码？', style: TextStyle(fontSize: 14, color: AppColors.onSurfaceVariant)),
+                  ),
+              ]),
               // 平台账号登录：按系统显示对应入口
               if (!kIsWeb && Platform.isIOS) ...[
                 const SizedBox(height: 14),

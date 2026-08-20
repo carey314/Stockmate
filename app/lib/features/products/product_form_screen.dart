@@ -288,15 +288,15 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       TextButton(onPressed: () => setState(() => _imageUrl = null), child: const Text('移除', style: TextStyle(fontSize: 12))),
                   ]),
                   const SizedBox(height: 12),
-                  TextField(controller: _name, decoration: const InputDecoration(hintText: '商品名称')),
+                  TextField(controller: _name, decoration: const InputDecoration(labelText: '商品名称')),
                   const SizedBox(height: 12),
                   Row(children: [
-                    Expanded(child: TextField(controller: _unit, decoration: const InputDecoration(hintText: '单位'))),
+                    Expanded(child: TextField(controller: _unit, decoration: const InputDecoration(labelText: '单位（斤/瓶/箱…）'))),
                     if (!hasSpecDims) ...[
                       const SizedBox(width: 12),
                       Expanded(
                           child: TextField(
-                              controller: _price, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '售价 ¥'))),
+                              controller: _price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '售价 ¥'))),
                     ],
                   ]),
                   if (!hasSpecDims) ...[
@@ -306,13 +306,13 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                           child: TextField(
                               controller: _cost,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(hintText: '成本价 ¥（选填）'))),
+                              decoration: const InputDecoration(labelText: '成本价 ¥（选填）'))),
                       const SizedBox(width: 12),
                       Expanded(
                           child: TextField(
                               controller: _minQty,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(hintText: '预警线（选填）'))),
+                              decoration: const InputDecoration(labelText: '预警线（选填）'))),
                     ]),
                   ],
                   // ===== 规格编辑器（品类有规格维度时） =====
@@ -545,7 +545,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 TextField(
                   controller: priceCtl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(hintText: '统一售价 ¥（生成后可逐个改）'),
+                  decoration: const InputDecoration(labelText: '统一售价 ¥（生成后可逐个改）'),
                 ),
                 const SizedBox(height: 14),
                 SizedBox(
@@ -747,14 +747,14 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 Row(children: [
                   Expanded(
                       child: TextField(
-                          controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '售价 ¥ *'))),
+                          controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '售价 ¥ *'))),
                   const SizedBox(width: 12),
                   Expanded(
                       child: TextField(
-                          controller: cost, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '成本 ¥'))),
+                          controller: cost, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '成本 ¥'))),
                 ]),
                 const SizedBox(height: 12),
-                TextField(controller: barcode, decoration: const InputDecoration(hintText: '条形码（选填，扫码用）')),
+                TextField(controller: barcode, decoration: const InputDecoration(labelText: '条形码（选填，扫码用）')),
                 const SizedBox(height: 12),
                 // 规格图：服装同款不同色，每个颜色一张（列表/选货处优先用它）
                 Row(children: [
@@ -790,7 +790,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 TextField(
                   controller: minQty,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(hintText: '预警线（低于这个数提醒补货）'),
+                  decoration: const InputDecoration(labelText: '预警线', hintText: '低于这个数提醒补货'),
                 ),
                 const SizedBox(height: 8),
                 Text('库存在下面的规格行上直接加减，不用进这里改', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 12)),
@@ -917,21 +917,23 @@ class DynamicFieldInput extends StatelessWidget {
             if (picked != null) onChanged(picked.toIso8601String().substring(0, 10));
           },
           child: InputDecorator(
-            decoration: InputDecoration(hintText: label),
-            child: Text(value?.toString() ?? label, style: TextStyle(color: value == null ? const Color(0xFF9AA0AE) : null)),
+            decoration: InputDecoration(labelText: label),
+            // isEmpty 决定标签是"占位"还是"浮到框顶"。没它的话空状态会把标签显示两遍
+            isEmpty: value == null,
+            child: value == null ? const SizedBox(height: 20) : Text(value.toString()),
           ),
         );
       case 'number':
         return TextFormField(
           initialValue: value?.toString() ?? '',
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(hintText: label, suffixText: field.unit),
+          decoration: InputDecoration(labelText: label, suffixText: field.unit),
           onChanged: (v) => onChanged(double.tryParse(v)),
         );
       default:
         return TextFormField(
           initialValue: value?.toString() ?? '',
-          decoration: InputDecoration(hintText: label),
+          decoration: InputDecoration(labelText: label),
           onChanged: onChanged,
         );
     }

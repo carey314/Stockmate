@@ -190,7 +190,7 @@ class _TypeEditScreenState extends ConsumerState<TypeEditScreen> {
       children: [
         Text('品类名称', style: t.labelMedium),
         const SizedBox(height: 8),
-        TextField(controller: _name, decoration: const InputDecoration(hintText: '品类名称，如：奶茶店物料')),
+        TextField(controller: _name, decoration: const InputDecoration(labelText: '品类名称，如：奶茶店物料')),
         const SizedBox(height: 16),
         if (showAiButton)
           OutlinedButton.icon(
@@ -324,9 +324,9 @@ class _TypeEditScreenState extends ConsumerState<TypeEditScreen> {
                 ),
               ]),
               const SizedBox(height: 12),
-              TextField(controller: label, decoration: const InputDecoration(hintText: '字段名（如：口味）')),
+              TextField(controller: label, decoration: const InputDecoration(labelText: '字段名（如：口味）')),
               const SizedBox(height: 12),
-              TextField(controller: key, decoration: const InputDecoration(hintText: '英文标识（如 flavor，留空自动生成）')),
+              TextField(controller: key, decoration: const InputDecoration(labelText: '英文标识（如 flavor，留空自动生成）')),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -336,9 +336,9 @@ class _TypeEditScreenState extends ConsumerState<TypeEditScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              if (type == 'number') TextField(controller: unit, decoration: const InputDecoration(hintText: '单位（如：斤 / ml / 天）')),
+              if (type == 'number') TextField(controller: unit, decoration: const InputDecoration(labelText: '单位（如：斤 / ml / 天）')),
               if (type == 'select')
-                TextField(controller: options, decoration: const InputDecoration(hintText: '选项，用、分隔（如：原味、辣味）')),
+                TextField(controller: options, decoration: const InputDecoration(labelText: '选项，用、分隔（如：原味、辣味）')),
               const SizedBox(height: 12),
               Row(children: [
                 Switch(value: required, onChanged: (v) => setModal(() => required = v)),

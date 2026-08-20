@@ -88,4 +88,23 @@ const monthlyAiCalls = async (storeId) => {
   return rows.reduce((s, r) => s + r.calls, 0);
 };
 
-module.exports = { PLAN_FREE, CORE_ENDPOINTS, currentPlan, grantEntitlement, revokeEntitlement, recordAiUsage, dailyAiCalls, monthlyAiCalls };
+/// 本月有几天把额度用满了。订阅页拿它说人话："这个月有 12 天不够用"。
+/// 这个数字必须是真的——拿假数字劝人掏钱，被发现一次信任就没了。
+/// 只统计 core（口述记账）那份额度，因为那才是用户真正会撞的墙。
+const daysHitLimit = async (limit, storeId) => {
+  const id = storeId ?? getTenantId();
+  if (!id || !limit || limit <= 0) return 0;
+  const prefix = localDayKey(new Date()).slice(0, 7);
+  const rows = await basePrisma.aiUsage.findMany({
+    where: { storeId: id, day: { startsWith: prefix }, endpoint: { in: CORE_ENDPOINTS } },
+    select: { day: true, calls: true },
+  });
+  // 同一天可能有多个 core 端点各记一行，先按天合并再判断
+  const perDay = new Map();
+  for (const r of rows) perDay.set(r.day, (perDay.get(r.day) ?? 0) + r.calls);
+  let n = 0;
+  for (const calls of perDay.values()) if (calls >= limit) n++;
+  return n;
+};
+
+module.exports = { PLAN_FREE, CORE_ENDPOINTS, currentPlan, grantEntitlement, revokeEntitlement, recordAiUsage, dailyAiCalls, monthlyAiCalls, daysHitLimit };

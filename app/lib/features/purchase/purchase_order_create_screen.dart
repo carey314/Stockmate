@@ -201,9 +201,9 @@ class _PurchaseOrderCreateScreenState extends ConsumerState<PurchaseOrderCreateS
       builder: (dctx) => AlertDialog(
         title: const Text('新建供应商'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: name, autofocus: true, decoration: const InputDecoration(hintText: '供应商名称')),
+          TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: '供应商名称')),
           const SizedBox(height: 10),
-          TextField(controller: phone, decoration: const InputDecoration(hintText: '电话（选填）')),
+          TextField(controller: phone, decoration: const InputDecoration(labelText: '电话（选填）')),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('取消')),
@@ -230,12 +230,14 @@ class _PurchaseOrderCreateScreenState extends ConsumerState<PurchaseOrderCreateS
     final types = await ref.read(typesProvider.future);
     final mainTypeId = ref.read(mainTypeIdProvider);
     if (!mounted) return;
+    // 弹窗筛选状态必须放在 builder 外面：键盘弹起会让 showModalBottomSheet 重跑 builder，
+    // 放里面的变量当场被重置——表现是"输入框有字、列表却没过滤"。同 order_create_screen。
+    String query = '';
+    int? typeFilter = mainTypeId; // 默认主营品类
     final picked = await showModalBottomSheet<Product>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
-        String query = '';
-        int? typeFilter = mainTypeId; // 默认主营品类
         return StatefulBuilder(
           builder: (ctx, setModal) {
             var products = typeFilter == null ? all : all.where((p) => p.productTypeId == typeFilter).toList();
@@ -376,9 +378,9 @@ class _PurchaseOrderCreateScreenState extends ConsumerState<PurchaseOrderCreateS
             const SizedBox(height: 4),
             Text('先把货收进来，详细信息回头再补', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 12)),
             const SizedBox(height: 14),
-            TextField(controller: name, autofocus: true, decoration: const InputDecoration(hintText: '商品名称 *')),
+            TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: '商品名称 *')),
             const SizedBox(height: 10),
-            TextField(controller: price, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(hintText: '零售价 ¥（可先不填）')),
+            TextField(controller: price, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: '零售价 ¥（可先不填）')),
             const SizedBox(height: 12),
             Wrap(spacing: 6, runSpacing: 6, children: [
               for (final tp in types)
@@ -464,9 +466,9 @@ class _PurchaseOrderCreateScreenState extends ConsumerState<PurchaseOrderCreateS
               style: Theme.of(ctx).textTheme.headlineMedium),
           const SizedBox(height: 16),
           Row(children: [
-            Expanded(child: TextField(controller: qty, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(hintText: '数量'))),
+            Expanded(child: TextField(controller: qty, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: '数量'))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '进价 ¥'))),
+            Expanded(child: TextField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '进价 ¥'))),
           ]),
           const SizedBox(height: 16),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确定')),
@@ -567,18 +569,37 @@ class _PurchaseOrderCreateScreenState extends ConsumerState<PurchaseOrderCreateS
                 ]),
               ),
             ),
+          // 三个按钮等分会把「添加商品」挤成两行（"添加商/品"）——它比另两个都长。
+          // 按内容需要分配：主按钮拿大头，扫码/拍单据够用就行。
+          // FittedBox 是保险：用户把系统字号调到最大时（我们的目标用户常这么设），
+          // 文字自动缩小而不是换行或被截断——按钮高度始终齐平。
           Row(children: [
-            Expanded(child: OutlinedButton.icon(onPressed: _addProduct, icon: const Icon(Icons.add, size: 18), label: const Text('添加商品'))),
-            const SizedBox(width: 8),
-            Expanded(child: OutlinedButton.icon(onPressed: _scanAdd, icon: const Icon(Icons.qr_code_scanner_rounded, size: 16), label: const Text('扫码'))),
+            Expanded(
+              flex: 3,
+              child: OutlinedButton.icon(
+                onPressed: _addProduct,
+                icon: const Icon(Icons.add, size: 18),
+                label: const FittedBox(fit: BoxFit.scaleDown, child: Text('添加商品', maxLines: 1)),
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(
+              flex: 2,
+              child: OutlinedButton.icon(
+                onPressed: _scanAdd,
+                icon: const Icon(Icons.qr_code_scanner_rounded, size: 16),
+                label: const FittedBox(fit: BoxFit.scaleDown, child: Text('扫码', maxLines: 1)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
               child: OutlinedButton.icon(
                 onPressed: _ocrRunning ? null : _importFromPhoto,
                 icon: _ocrRunning
                     ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.document_scanner_outlined, size: 16),
-                label: const Text('拍单据'),
+                label: const FittedBox(fit: BoxFit.scaleDown, child: Text('拍单据', maxLines: 1)),
               ),
             ),
           ]),
@@ -589,7 +610,8 @@ class _PurchaseOrderCreateScreenState extends ConsumerState<PurchaseOrderCreateS
             TextField(
               controller: _paid,
               keyboardType: TextInputType.number,
-              decoration: InputDecoration(hintText: '已付 ¥（默认付清 ${_total.toStringAsFixed(2)}，少付=欠供应商）'),
+              decoration: InputDecoration(
+                  labelText: '已付 ¥', hintText: '默认付清 ${_total.toStringAsFixed(2)}，少付=欠供应商'),
               onChanged: (_) => setState(() {}),
             ),
             if (paidValue != null && owed > 0)

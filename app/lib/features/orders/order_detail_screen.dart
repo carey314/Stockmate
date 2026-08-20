@@ -36,6 +36,53 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     _load();
   }
 
+
+  /// 作废整单：库存退回、收过的钱生成退款流水，不可恢复。
+  /// 放在右上角菜单而不是底部动作区——它和「收款」「再来一单」不是一个量级的操作，
+  /// 并排摆着迟早被误点（跟删除账号不能挨着退出登录是同一个道理）。
+  Future<void> _cancelOrder() async {
+    final o = _order;
+    if (o == null) return;
+    final paid = ((o['paidAmount'] ?? 0) as num).toDouble();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('作废这张单？'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('单号 ${o['orderNo']}'),
+          const SizedBox(height: 10),
+          const Text('· 卖出去的货会退回库存', style: TextStyle(fontSize: 13)),
+          if (paid > 0.001)
+            Text('· 已收的 ¥${_money.format(paid)} 会记一笔退款流水（钱要真退给客户）',
+                style: const TextStyle(fontSize: 13, color: AppColors.error)),
+          const SizedBox(height: 8),
+          const Text('作废后不能恢复。', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('再想想')),
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            child: const Text('确认作废', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await Api.I.put('/orders/${widget.orderId}/cancel');
+      ref.invalidate(ordersProvider);
+      invalidateProducts(ref);
+      ref.invalidate(overviewProvider);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('✓ 已作废，库存已退回${paid > 0.001 ? '，应退客户 ¥${_money.format(paid)}' : ''}')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('作废失败：$e')));
+    }
+  }
+
   Future<void> _load() async {
     try {
       final data = await Api.I.get('/orders/${widget.orderId}');
@@ -77,7 +124,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
               controller: amount,
               autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(hintText: '收款金额 ¥'),
+              decoration: const InputDecoration(labelText: '收款金额 ¥'),
               onChanged: (_) => setModal(() {}),
             ),
             const SizedBox(height: 12),
@@ -250,7 +297,22 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
   Widget build(BuildContext context) {
     final o = _order;
     return Scaffold(
-      appBar: AppBar(title: Text(o?['orderNo'] ?? '单据详情')),
+      appBar: AppBar(
+        title: Text(o?['orderNo'] ?? '单据详情'),
+        actions: [
+          if (o != null && o['status'] == 'completed')
+            PopupMenuButton<String>(
+              tooltip: '更多',
+              onSelected: (v) { if (v == 'cancel') _cancelOrder(); },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'cancel',
+                  child: Text('作废这张单', style: TextStyle(color: AppColors.error)),
+                ),
+              ],
+            ),
+        ],
+      ),
       bottomNavigationBar: o == null
           ? null
           : SafeArea(

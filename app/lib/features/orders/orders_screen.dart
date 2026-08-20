@@ -48,7 +48,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     final orders = ref.watch(ordersProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('开单 · 订单')),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.primary,
         onPressed: () => context.push('/orders/new'),
@@ -57,11 +56,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: () async => ref.refresh(ordersProvider.future),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(kPagePadding, 8, kPagePadding, 120),
-          children: [
-            Text('订单', style: t.headlineLarge),
-            const SizedBox(height: 16),
+        child: CustomScrollView(slivers: [
+          const AppLargeTitleBar('订单'),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(kPagePadding, 0, kPagePadding, 120),
+            sliver: SliverList.list(children: [
             // 搜索：客户名 / 单号
             TextField(
               controller: _searchCtl,
@@ -178,8 +177,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 ]);
               },
             ),
-          ],
-        ),
+            ]),
+          ),
+        ]),
       ),
     );
   }

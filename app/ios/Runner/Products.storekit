@@ -1,0 +1,86 @@
+{
+  "identifier" : "A1B2C3D4-0000-4000-8000-STOCKMATE001",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "zh_CN",
+    "_storefront" : "CHN",
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "20250816",
+      "localizations" : [
+        {
+          "description" : "智存专业版",
+          "displayName" : "智存专业版",
+          "locale" : "zh_CN"
+        }
+      ],
+      "name" : "StockMate Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "19.00",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "20250816001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "AI 口述记账不限次，AI 问生意每天 50 次。记账、报表、对账等基础功能免费版本来就有，订阅只增加 AI 用量。",
+              "displayName" : "专业版 · 月付",
+              "locale" : "zh_CN"
+            }
+          ],
+          "productID" : "com.carey.stockmate.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "专业版-月付",
+          "subscriptionGroupID" : "20250816",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "168.00",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "20250816002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "AI 口述记账不限次，AI 问生意每天 50 次。年付更划算。",
+              "displayName" : "专业版 · 年付",
+              "locale" : "zh_CN"
+            }
+          ],
+          "productID" : "com.carey.stockmate.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "专业版-年付",
+          "subscriptionGroupID" : "20250816",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

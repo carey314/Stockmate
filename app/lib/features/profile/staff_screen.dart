@@ -105,11 +105,11 @@ class StaffScreen extends ConsumerWidget {
       builder: (dctx) => AlertDialog(
         title: const Text('添加员工'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: realName, autofocus: true, decoration: const InputDecoration(hintText: '员工姓名/称呼')),
+          TextField(controller: realName, autofocus: true, decoration: const InputDecoration(labelText: '员工姓名/称呼')),
           const SizedBox(height: 10),
-          TextField(controller: username, decoration: const InputDecoration(hintText: '登录用户名（至少3位）')),
+          TextField(controller: username, decoration: const InputDecoration(labelText: '登录用户名（至少3位）')),
           const SizedBox(height: 10),
-          TextField(controller: password, decoration: const InputDecoration(hintText: '初始密码（至少6位）')),
+          TextField(controller: password, decoration: const InputDecoration(labelText: '初始密码（至少6位）')),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('取消')),
@@ -153,7 +153,7 @@ class StaffScreen extends ConsumerWidget {
       context: context,
       builder: (dctx) => AlertDialog(
         title: Text('重置「${u['realName']}」的密码'),
-        content: TextField(controller: pwd, autofocus: true, decoration: const InputDecoration(hintText: '新密码（至少6位）')),
+        content: TextField(controller: pwd, autofocus: true, decoration: const InputDecoration(labelText: '新密码（至少6位）')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('取消')),
           TextButton(onPressed: () => Navigator.pop(dctx, true), child: const Text('重置')),

@@ -154,7 +154,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                 ),
               ]),
               const SizedBox(height: 14),
-              TextField(controller: qty, autofocus: true, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(hintText: '数量')),
+              TextField(controller: qty, autofocus: true, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: '数量')),
               const SizedBox(height: 8),
               Text(
                 action == 'inbound' ? '用途：盘盈 / 纠错 / 自用退回' : '用途：盘亏 / 报损 / 过期 / 自用领用',

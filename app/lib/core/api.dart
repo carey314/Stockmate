@@ -3,8 +3,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// API 客户端：统一 baseUrl / Token 注入 / 错误信息提取
 class Api {
-  // iOS 模拟器直连宿主机 localhost；真机联调用 --dart-define=API_BASE=http://<Mac局域网IP>:3100/api/v1
-  static const baseUrl = String.fromEnvironment('API_BASE', defaultValue: 'http://localhost:3100/api/v1');
+  // 默认指生产。**不要改回 localhost**——
+  // 默认值写本地的话，打 release 包忘传 --dart-define 就是一个连不上任何后端的废包，
+  // 而这种错在打包那一刻毫无提示，直到装到手机上登录转圈才发现（审核按 2.1 直接拒）。
+  // 现在忘传参数最坏也只是本地开发连了线上，代价小得多。
+  // 本地联调：--dart-define=API_BASE=http://localhost:3100/api/v1
+  // 真机联调：--dart-define=API_BASE=http://<Mac局域网IP>:3100/api/v1
+  static const baseUrl =
+      String.fromEnvironment('API_BASE', defaultValue: 'https://qxju.shop/mate-api/api/v1');
 
   static final Api I = Api._();
   late final Dio dio;

@@ -15,6 +15,10 @@ import '../../core/theme.dart';
 /// - 卖出已建档商品 → 挂"散客"真实扣库存（正式销售单）
 /// - 卖出未建档商品 → 只记收入（明确标注，不做假库存）
 /// - AI 只出草案，确认前零落库；底部大按钮带汇总
+/// 收款规则的完整解释。选项里只放结果（已收款/挂账/默认），规则收在 ⓘ 里，
+/// 免得每个选项都拖一句长解释。文案与 Web 端一字不差。
+const _kPaidRuleHint = '口述里没说收没收钱时：散客默认按已收款，记名客户默认记挂账（月结常态，防止把没收的钱记成收了）';
+
 class VoiceEntryScreen extends ConsumerStatefulWidget {
   /// 语音事件时间线：集成测试诊断 + 真机排障用（同 isolate 直接读）
   static final List<String> debugEvents = [];
@@ -193,8 +197,29 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
     });
     try {
       final data = await Api.I.post('/ai/parse-entry', data: {'text': text, 'mode': _mode});
+      ref.invalidate(entitlementProvider); // 用掉一次，剩余数当场刷新
       setState(() => _result = ParseResult.fromJson(data));
     } catch (e) {
+      // 额度用完（后端 402）不该只弹个 toast 就完事——给他一条出路。
+      // 出路只能是 App 内订阅页（IAP），出现任何站外购买引导都是审核红线。
+      final msg = '$e';
+      if (msg.contains('用完了')) {
+        if (!mounted) return;
+        ref.invalidate(entitlementProvider);
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (dctx) => AlertDialog(
+            title: const Text('今天的 AI 次数用完了'),
+            content: Text(msg.replaceFirst(RegExp(r'^.*?：'), '')),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('知道了')),
+              TextButton(onPressed: () => Navigator.pop(dctx, true), child: const Text('看看专业版')),
+            ],
+          ),
+        );
+        if (go == true && mounted) context.push('/pro');
+        return;
+      }
       _toast('AI 解析失败：$e');
     } finally {
       if (mounted) setState(() => _parsing = false);
@@ -220,7 +245,7 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
           for (final i in r.purchases)
             {
               if (i.matchedProductId != null) 'productId': i.matchedProductId,
-              if (i.matchedProductId == null) 'createProduct': true,
+              if (i.matchedProductId == null && i.createProduct) 'createProduct': true,
               if (i.productTypeId != null) 'productTypeId': i.productTypeId,
               'name': i.name,
               'quantity': i.quantity,
@@ -240,6 +265,10 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
               if (s.totalAmount != null) 'totalAmount': s.totalAmount,
               if (s.unitPrice != null) 'unitPrice': s.unitPrice,
               if (s.paid != null) 'paid': s.paid,
+              if (s.matchedProductId == null && s.createProduct) ...{
+                'createProduct': true,
+                if (s.productTypeId != null) 'productTypeId': s.productTypeId,
+              },
             }
         ],
         'expenses': [
@@ -469,8 +498,13 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
           ]),
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text('🎤 说话 · 🧾 传收款账单截图（微信/支付宝日账单）· 或直接打字',
-                style: t.bodyMedium?.copyWith(fontSize: 11)),
+            child: Row(children: [
+              Expanded(
+                child: Text('🎤 说话 · 🧾 传收款账单截图（微信/支付宝日账单）· 或直接打字',
+                    style: t.bodyMedium?.copyWith(fontSize: 11)),
+              ),
+              _quotaChip(),
+            ]),
           ),
           if (_listening)
             Padding(
@@ -512,9 +546,16 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
               _RowCard(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Flexible(child: Text(item.name, style: t.titleMedium, overflow: TextOverflow.ellipsis)),
-                      const SizedBox(width: 6),
+                    // 同卖出行：名字 + 状态标签挤一行会溢出，交给 Wrap 换行
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 180),
+                        child: Text(item.name, style: t.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
                       if (item.matchedProductId != null)
                         const Text('已有商品', style: TextStyle(fontSize: 11, color: AppColors.success))
                       else
@@ -523,6 +564,14 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
                           onTap: () => _pickType(item),
                         ),
                     ]),
+                    if (item.matchedProductId == null)
+                      _createProductToggle(
+                        value: item.createProduct,
+                        typeId: item.productTypeId,
+                        onChanged: (v) => setState(() => item.createProduct = v),
+                        onTypeResolved: (id) => setState(() => item.productTypeId = id),
+                        verb: '入库',
+                      ),
                     Text(
                       '${_fmtQty(item.quantity)}${item.unit}${item.totalCost != null ? ' · 共¥${item.totalCost}' : ''}${item.unitCost != null ? ' · ¥${item.unitCost}/${item.unit}' : ''}',
                       style: t.bodyMedium?.copyWith(fontSize: 13),
@@ -536,29 +585,52 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
           // ===== 卖出 =====
           if (r.sales.isNotEmpty) ...[
             const SizedBox(height: 10),
-            _SectionHeader(icon: Icons.sell_outlined, label: '卖出（${r.sales.length}）', color: AppColors.success),
+            Row(children: [
+              _SectionHeader(icon: Icons.sell_outlined, label: '卖出（${r.sales.length}）', color: AppColors.success),
+              // 规则解释收进 ⓘ：选项只留结果，解释放这里，互不干扰
+              IconButton(
+                icon: const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.onSurfaceVariant),
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.only(left: 4),
+                constraints: const BoxConstraints(),
+                tooltip: _kPaidRuleHint,
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (dctx) => AlertDialog(
+                    title: const Text('收款怎么算？'),
+                    content: const Text(_kPaidRuleHint),
+                    actions: [TextButton(onPressed: () => Navigator.pop(dctx), child: const Text('知道了'))],
+                  ),
+                ),
+              ),
+            ]),
             const SizedBox(height: 6),
             for (final (i, s) in r.sales.indexed)
               _RowCard(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Flexible(child: Text(s.name, style: t.titleMedium, overflow: TextOverflow.ellipsis)),
-                      const SizedBox(width: 6),
+                    // 名字 + 客户 + 收款 + 库存四个东西挤一行必然溢出（真爆过 67px）。
+                    // 用 Wrap 让标签自动换行——手机宽度就那么点，硬挤只会出黑黄条纹。
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 160),
+                        child: Text(s.name, style: t.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
                       // 卖给谁（识别到的客户 / 散客）
                       _TapTag(text: s.customerName ?? '散客', color: AppColors.primary),
-                      // 收款状态：记名客户没明说收钱 → 会记挂账，这里要让老板看见
-                      if (s.paid == false || (s.paid == null && s.customerId != null))
-                        const Padding(
-                          padding: EdgeInsets.only(left: 6),
-                          child: Text('挂账', style: TextStyle(fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.w700)),
-                        )
-                      else if (s.paid == true)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 6),
-                          child: Text('已收款', style: TextStyle(fontSize: 11, color: AppColors.success)),
-                        ),
-                      const SizedBox(width: 4),
+                      // 收款状态：点一下能改。文案说结果不说系统行话——
+                      // "没提"这种词店主看不懂，直接告诉他这笔按什么算
+                      _TapTag(
+                        text: _paidLabel(s),
+                        color: s.paid == true
+                            ? AppColors.success
+                            : (s.paid == false ? AppColors.warning : AppColors.onSurfaceVariant),
+                        onTap: () => _pickPaid(s),
+                      ),
                       if (s.matchedProductId != null)
                         _TapTag(
                           text: '扣库存${s.chosenSku != null && s.chosenSku!.specText.isNotEmpty ? '·${s.chosenSku!.specText}' : ''}${s.skuOptions.length > 1 ? ' ▾' : ''}',
@@ -568,6 +640,15 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
                       else
                         const _TapTag(text: '未建档·只记收入', color: AppColors.warning),
                     ]),
+                    // 没档案的商品，可以确认时顺便建进来。不勾就只记一笔收入、不动库存。
+                    if (s.matchedProductId == null)
+                      _createProductToggle(
+                        value: s.createProduct,
+                        typeId: s.productTypeId,
+                        onChanged: (v) => setState(() => s.createProduct = v),
+                        onTypeResolved: (id) => setState(() => s.productTypeId = id),
+                        verb: '扣库存',
+                      ),
                     Text(
                       s.priceUnstated && s.chosenSku != null
                           // 没说价 → 显示系统将按什么价（专属/上次/标价）
@@ -704,6 +785,128 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
     }
   }
 
+  /// 「顺便建档」勾选：没档案的商品，确认时一并建进商品库并真扣/加库存。
+  /// 默认落在主营品类——摊主九成时间只做一门生意，不该每次都问他归到哪。
+  /// 一个品类都没有时禁用并说清楚为什么，别给个点不动的空勾选框。
+  Widget _createProductToggle({
+    required bool value,
+    required int? typeId,
+    required ValueChanged<bool> onChanged,
+    required ValueChanged<int> onTypeResolved,
+    required String verb, // 扣库存 / 入库
+  }) {
+    final types = ref.watch(typesProvider).valueOrNull ?? const [];
+    if (types.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 4),
+        child: Text('先建品类，才能顺便建商品档案', style: TextStyle(fontSize: 11, color: AppColors.warning)),
+      );
+    }
+    final resolved = typeId ?? ref.read(mainTypeIdProvider) ?? types.first.id;
+    if (typeId != resolved) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => onTypeResolved(resolved));
+    }
+    final tname = types.where((x) => x.id == resolved).firstOrNull?.name ?? types.first.name;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(children: [
+        SizedBox(
+          width: 26,
+          height: 26,
+          child: Checkbox(
+            value: value,
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            onChanged: (v) => onChanged(v ?? false),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: GestureDetector(
+            onTap: () => onChanged(!value),
+            child: Text('顺便建档到「$tname」并$verb',
+                style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant)),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  /// 今天还剩几次。**不是为了限制，是为了让人心里有数**——
+  /// 用到第 9 次突然被拦，和一路看着"还剩 2 次"用到底，是完全不同的体验。
+  /// 额度为 null（付费版/未配额度）时整个不显示，免得给不限量的用户添噪音。
+  Widget _quotaChip() {
+    final e = ref.watch(entitlementProvider).valueOrNull;
+    if (e == null) return const SizedBox.shrink();
+    final today = e['today'] as Map<String, dynamic>?;
+    final limit = today?['coreLimit'] as int?;
+    if (limit == null || limit <= 0) return const SizedBox.shrink();
+    final used = (today?['coreUsed'] as int?) ?? 0;
+    final left = (limit - used).clamp(0, limit);
+    // 剩 2 次以内转成警示色：给用户留出"今天悠着点用"的余地
+    final warn = left <= 2;
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: (warn ? AppColors.warning : AppColors.primary).withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        left > 0 ? '今天还剩 $left 次' : '今天次数已用完',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: warn ? AppColors.warning : AppColors.primary,
+        ),
+      ),
+    );
+  }
+
+  /// 这一行当前按什么算。null（没明说）时直接告诉他默认会走哪边，不出现"没提"这种行话。
+  String _paidLabel(ParsedSale s) {
+    if (s.paid == true) return '已收款';
+    if (s.paid == false) return '挂账（先欠着）';
+    return s.isNamedCustomer ? '默认：挂账' : '默认：已收款';
+  }
+
+  /// 三选一：已收款 / 挂账（先欠着）/ 默认（跟着客户类型走）
+  Future<void> _pickPaid(ParsedSale s) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('这笔钱收了吗？', style: Theme.of(ctx).textTheme.headlineMedium),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.check_circle_outline_rounded, color: AppColors.success),
+            title: const Text('已收款'),
+            onTap: () => Navigator.pop(ctx, 'paid'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.schedule_rounded, color: AppColors.warning),
+            title: const Text('挂账（先欠着）'),
+            onTap: () => Navigator.pop(ctx, 'unpaid'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.auto_awesome_outlined, color: AppColors.onSurfaceVariant),
+            title: Text(s.isNamedCustomer ? '默认：挂账' : '默认：已收款'),
+            subtitle: const Text(_kPaidRuleHint, style: TextStyle(fontSize: 11)),
+            onTap: () => Navigator.pop(ctx, 'auto'),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (picked == null) return;
+    setState(() => s.paid = picked == 'paid' ? true : (picked == 'unpaid' ? false : null));
+  }
+
   Future<void> _editSale(int index) async {
     final s = _result!.sales[index];
     final vals = await _editSheet(name: s.name, qty: s.quantity, unit: s.unit, amount: s.totalAmount, amountLabel: '总卖价 ¥');
@@ -757,12 +960,12 @@ class _VoiceEntryScreenState extends ConsumerState<VoiceEntryScreen> {
           children: [
             Text('修改', style: Theme.of(ctx).textTheme.headlineMedium),
             const SizedBox(height: 16),
-            TextField(controller: nameC, decoration: const InputDecoration(hintText: '名称')),
+            TextField(controller: nameC, decoration: const InputDecoration(labelText: '名称')),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: TextField(controller: qtyC, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '数量'))),
+              Expanded(child: TextField(controller: qtyC, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '数量'))),
               const SizedBox(width: 12),
-              Expanded(child: TextField(controller: unitC, decoration: const InputDecoration(hintText: '单位'))),
+              Expanded(child: TextField(controller: unitC, decoration: const InputDecoration(labelText: '单位'))),
             ]),
             const SizedBox(height: 12),
             TextField(controller: amountC, keyboardType: TextInputType.number, decoration: InputDecoration(hintText: amountLabel)),

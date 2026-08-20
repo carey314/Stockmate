@@ -46,14 +46,18 @@ async function main() {
   ok(rB.status === 200 && rB.body.data.token, '店B注册成功');
   const tA = rA.body.data.token, tB = rB.body.data.token;
 
-  // 各自应有 3 套预设品类、0 商品
+  // 新店必须是真空的：不预填任何品类。
+  // 给所有人塞"酒水/玩具/餐饮食材"，对水果店老板就是三个要删的垃圾；
+  // 改由首页「三步开工」引导他说出自己的行业，AI 现场配。
   const typesA = await req('GET', `${BASE}/product-types`, tA);
-  ok(typesA.body.data.length === 3, '店A开箱有3套预设品类');
+  ok(typesA.body.data.length === 0, '店A开箱是空的（不预填品类）');
   const prodA0 = await req('GET', `${BASE}/products`, tA);
   ok(prodA0.body.data.pagination.total === 0, '店A初始0商品');
 
-  // 店A 建商品 + 客户
-  const typeId = typesA.body.data[0].id;
+  // 店A 自己建品类（模拟引导第1步的结果）+ 建商品 + 建客户
+  const newType = await req('POST', `${BASE}/product-types`, tA, { name: 'A店酒水', icon: '🍾', fields: [] });
+  ok(newType.status === 200 || newType.status === 201, '店A自建品类成功');
+  const typeId = newType.body.data.id;
   const pA = await req('POST', `${BASE}/products`, tA, { name: 'A店酒', productTypeId: typeId, unit: '瓶', defaultPrice: 100, costPrice: 60, customFields: { brand: 'x' } });
   ok(pA.status === 201, '店A建商品成功');
   const skuA = pA.body.data.skus[0].id;
@@ -85,7 +89,7 @@ async function main() {
   ok(pACheck.body.data.skus[0].price === 100, '店A SKU价格未被越权改动');
 
   // 店B 正常经营：建货→入库→开单，单号与店A独立不撞
-  const typeB = (await req('GET', `${BASE}/product-types`, tB)).body.data[0].id;
+  const typeB = (await req('POST', `${BASE}/product-types`, tB, { name: 'B店酒水', icon: '🍾', fields: [] })).body.data.id;
   const pB = await req('POST', `${BASE}/products`, tB, { name: 'B店酒', productTypeId: typeB, unit: '瓶', defaultPrice: 200, customFields: { brand: 'y' } });
   const skuB = pB.body.data.skus[0].id;
   await req('POST', `${BASE}/inventory/adjust`, tB, { skuId: skuB, quantity: 10, reason: '初始' });
