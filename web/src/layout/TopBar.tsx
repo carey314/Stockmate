@@ -1,4 +1,4 @@
-import { App, Avatar, Button, Dropdown, Tag } from 'antd'
+import { App, Avatar, Button, Dropdown, Modal, Tag } from 'antd'
 import {
   BellOutlined,
   CalendarOutlined,
@@ -11,6 +11,7 @@ import {
 import { useState } from 'react'
 import dayjs from 'dayjs'
 import api from '../api/client'
+import { downloadCsvBundle } from '../lib/exportCsv'
 import { useAuth } from '../auth'
 import { T } from '../theme'
 import { dateFormat, t } from '../lib/i18n'
@@ -34,20 +35,28 @@ export default function TopBar({
   const { message } = App.useApp()
   const isAdmin = user?.role === 'admin'
   const [exporting, setExporting] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const md = useMediaQuery('(min-width: 768px)')
 
   // 诚实承诺：数据永远是用户的，随时全量带走（GET /export/all，仅老板）
-  const onExport = async () => {
+  const onExport = async (fmt: 'json' | 'csv') => {
     setExporting(true)
     try {
-      const data = await api.get('/export/all')
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `${t('智存全量导出', 'stockmate_export')}_${dayjs().format('YYYYMMDD_HHmm')}.json`
-      a.click()
-      URL.revokeObjectURL(a.href)
-      message.success(t('已导出全部数据（JSON）', 'All data exported (JSON)'))
+      const data = await api.get<Record<string, unknown>>('/export/all')
+      const prefix = `${t('智存导出', 'stockmate')}_${dayjs().format('YYYYMMDD_HHmm')}`
+      if (fmt === 'json') {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+        const a = document.createElement('a')
+        const url = URL.createObjectURL(blob)
+        a.href = url
+        a.download = `${prefix}.json`
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 10_000) // 立即 revoke 会取消未启动的下载
+        message.success(t('已导出全部数据（JSON）', 'All data exported (JSON)'))
+      } else {
+        const n = await downloadCsvBundle(data, prefix)
+        message.success(t(`已导出 ${n} 张 CSV 表（浏览器若提示多文件下载请允许）`, `${n} CSV files exported (allow multiple downloads if prompted)`))
+      }
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -131,7 +140,7 @@ export default function TopBar({
             type="primary"
             icon={<DownloadOutlined />}
             loading={exporting}
-            onClick={onExport}
+            onClick={() => setExportOpen(true)}
             style={{ fontWeight: 600 }}
           >
             {md ? t('导出数据', 'Export') : null}
@@ -166,6 +175,36 @@ export default function TopBar({
           </div>
         </Dropdown>
       </div>
+      {/* 导出格式选择：antd v6 Dropdown 的 menu/popupRender 事件在此场景静默失联（烧过 4 轮），Modal 稳 */}
+      <Modal open={exportOpen} onCancel={() => setExportOpen(false)} footer={null} width={380} title={t('导出数据', 'Export data')}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8 }}>
+          <Button
+            size="large"
+            block
+            loading={exporting}
+            onClick={async () => {
+              await onExport('csv')
+              setExportOpen(false)
+            }}
+          >
+            {t('CSV 表格（Excel 直接打开）', 'CSV tables (opens in Excel)')}
+          </Button>
+          <Button
+            size="large"
+            block
+            loading={exporting}
+            onClick={async () => {
+              await onExport('json')
+              setExportOpen(false)
+            }}
+          >
+            {t('JSON 全量备份', 'JSON full backup')}
+          </Button>
+          <div style={{ fontSize: 12, color: T.secondary }}>
+            {t('CSV 会按表逐个下载多个文件，浏览器若提示请允许。数据永远是你的，导出永久免费。', 'CSV downloads one file per table — allow multiple downloads if prompted. Your data is always yours; export is free forever.')}
+          </div>
+        </div>
+      </Modal>
     </header>
   )
 }

@@ -19,6 +19,9 @@ import api, { assetUrl } from '../api/client'
 import { useAuth } from '../auth'
 import { EditNum, EditText } from '../components/EditableCells'
 import ImageUpload from '../components/ImageUpload'
+import InventoryMoveModal from '../components/InventoryMoveModal'
+import SkuRecordsDrawer from '../components/SkuRecordsDrawer'
+import RecipeModal from '../components/RecipeModal'
 import { fmtMoney, fmtQty } from '../lib/format'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
@@ -120,6 +123,22 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(false)
   const [alerts, setAlerts] = useState<AlertRow[]>([])
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
+  // 出入库/报损、库存流水、配方（两端功能对齐补齐项）
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [recordsSku, setRecordsSku] = useState<{ id: number; label: string } | null>(null)
+  const [recipeSku, setRecipeSku] = useState<{ id: number; label: string } | null>(null)
+  const [allSkuOpts, setAllSkuOpts] = useState<{ skuId: number; label: string }[]>([])
+  const ensureAllSkuOpts = () => {
+    if (allSkuOpts.length) return
+    api
+      .get<{ list: { name: string; skus: { id: number; specText: string }[] }[] }>('/products', { pageSize: 500 })
+      .then((d) => {
+        const opts: { skuId: number; label: string }[] = []
+        for (const pp of d.list) for (const ss of pp.skus) opts.push({ skuId: ss.id, label: `${pp.name}${ss.specText ? ` ${ss.specText}` : ''}` })
+        setAllSkuOpts(opts)
+      })
+      .catch(() => {})
+  }
   const initialType = useRef(false)
 
   // ===== 数据加载 =====
@@ -555,7 +574,7 @@ export default function ProductsPage() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(140px,1.2fr) 110px 110px 150px 110px 110px 60px',
+          gridTemplateColumns: 'minmax(140px,1.2fr) 110px 110px 150px 110px 110px 150px',
           gap: 8,
           fontSize: 12,
           color: T.secondary,
@@ -578,7 +597,7 @@ export default function ProductsPage() {
             key={s.id}
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(140px,1.2fr) 110px 110px 150px 110px 110px 60px',
+              gridTemplateColumns: 'minmax(140px,1.2fr) 110px 110px 150px 110px 110px 150px',
               gap: 8,
               alignItems: 'center',
               padding: '5px 0',
@@ -621,6 +640,15 @@ export default function ProductsPage() {
                 loadAlerts() // 预警线变了，低库存角标同步
               }}
             />
+            <span style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Button size="small" type="link" style={{ padding: '0 4px', fontSize: 12 }}
+              onClick={() => setRecordsSku({ id: s.id, label: `${p.name}${s.specText ? ` ${s.specText}` : ''}` })}>
+              {t('流水', 'History')}
+            </Button>
+            <Button size="small" type="link" style={{ padding: '0 4px', fontSize: 12 }}
+              onClick={() => { ensureAllSkuOpts(); setRecipeSku({ id: s.id, label: `${p.name}${s.specText ? ` ${s.specText}` : ''}` }) }}>
+              {t('配方', 'Recipe')}
+            </Button>
             {isAdmin && p.skus.length > 1 ? (
               <Popconfirm
                 title={t('删除该规格？', 'Delete this variant?')}
@@ -632,6 +660,7 @@ export default function ProductsPage() {
             ) : (
               <span />
             )}
+            </span>
           </div>
         )
       })}
@@ -745,6 +774,7 @@ export default function ProductsPage() {
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
           {t('新增商品', 'New product')}
         </Button>
+        <Button onClick={() => setMoveOpen(true)}>{t('出入库 / 报损', 'Stock in/out & loss')}</Button>
       </div>
 
       {/* 批量操作条 */}
@@ -1044,6 +1074,18 @@ export default function ProductsPage() {
           </Typography.Text>
         </Form>
       </Modal>
+
+      {/* 出入库/报损 + 库存流水 + 配方（两端功能对齐） */}
+      <InventoryMoveModal
+        open={moveOpen}
+        onClose={() => setMoveOpen(false)}
+        onDone={() => {
+          load()
+          loadAlerts()
+        }}
+      />
+      <SkuRecordsDrawer sku={recordsSku} onClose={() => setRecordsSku(null)} />
+      <RecipeModal sku={recipeSku} skuOpts={allSkuOpts} onClose={() => setRecipeSku(null)} />
     </div>
   )
 }
