@@ -146,6 +146,25 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             ),
                         ]),
                       ),
+                      const SizedBox(height: 12),
+                      // 变动记录：老板怀疑"数不对"时的排查入口（何时进/何时卖/谁报损）
+                      SoftCard(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        onTap: () => context.push(
+                            '/inventory-records?product=${p.id}&name=${Uri.encodeComponent(p.name)}'),
+                        child: Row(children: [
+                          const Icon(Icons.history_rounded, size: 20, color: AppColors.primary),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text('变动记录', style: t.titleMedium),
+                              Text('什么时候进的货、什么时候卖的，一查便知',
+                                  style: t.bodyMedium?.copyWith(fontSize: 11)),
+                            ]),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, color: AppColors.onSurfaceVariant),
+                        ]),
+                      ),
                     ],
                   ),
                 ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api.dart';
 import '../../core/models.dart';
@@ -137,7 +138,14 @@ class _InventoryMoveScreenState extends ConsumerState<InventoryMoveScreen> {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('出入库')),
+      appBar: AppBar(title: const Text('出入库'), actions: [
+        // 全店流水入口：报损完想确认"记上了没"，一步就能查
+        IconButton(
+          icon: const Icon(Icons.history_rounded),
+          tooltip: '库存流水',
+          onPressed: () => context.push('/inventory-records'),
+        ),
+      ]),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),

@@ -38,6 +38,7 @@ import 'features/stocktake/stocktake_screen.dart';
 import 'features/printer/printer_screen.dart';
 import 'features/customers/customers_screen.dart';
 import 'features/inventory/inventory_move_screen.dart';
+import 'features/inventory/inventory_records_screen.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'features/purchase/purchase_orders_screen.dart';
 import 'features/profile/about_screen.dart';
@@ -123,6 +124,11 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/customers', builder: (_, __) => const CustomersScreen()),
       GoRoute(path: '/customers/:id', builder: (_, s) => CustomerDetailScreen(customerId: int.parse(s.pathParameters['id']!))),
       GoRoute(path: '/inventory-move', builder: (_, __) => const InventoryMoveScreen()),
+      GoRoute(
+          path: '/inventory-records',
+          builder: (_, s) => InventoryRecordsScreen(
+              productId: int.tryParse(s.uri.queryParameters['product'] ?? ''),
+              productName: s.uri.queryParameters['name'])),
       GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
       GoRoute(path: '/stocktakes', builder: (_, __) => const StocktakeListScreen()),
       GoRoute(path: '/stocktakes/new', builder: (_, __) => const StocktakeCreateScreen()),
