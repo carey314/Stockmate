@@ -1,5 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'api.dart';
+
+/// 中文键盘的小数点救星：把「。」「，」「,」当成「.」，全角数字转半角。
+///
+/// 摊主的手机键盘九成停在中文，打"1.5"出来的是"1。5"——打不出英文句号
+/// 不是用户的错，是输入框该收下（真人测试：酒精度想填小数，怎么都输不进去）。
+/// 所有数字输入框（规格值/价格/数量/实收/折扣…）统一挂 kCnNumber。
+class CnNumberFormatter extends TextInputFormatter {
+  const CnNumberFormatter();
+  static const _map = {
+    '。': '.', '，': '.', ',': '.', // 数字语境下这些标点只有一个意图：小数点
+    '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
+    '５': '5', '６': '6', '７': '7', '８': '8', '９': '9',
+  };
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    var text = newValue.text;
+    _map.forEach((k, v) => text = text.replaceAll(k, v));
+    if (text == newValue.text) return newValue;
+    // 所有替换都是 1 字符 → 1 字符，光标位置不用重算
+    return newValue.copyWith(text: text);
+  }
+}
+
+/// 直接塞给 TextField.inputFormatters 用
+const kCnNumber = [CnNumberFormatter()];
 
 /// Aetheric Modern 设计令牌（来自 UI 参考包 DESIGN.md）
 /// 靛蓝紫主色 / 超浅底 / 24px 大圆角 / 无边框软阴影 / 大字重标题 / 药丸按钮

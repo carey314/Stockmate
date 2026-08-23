@@ -577,9 +577,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
               TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: '商品名称 *')),
               const SizedBox(height: 12),
               Row(children: [
-                Expanded(child: TextField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '售价 ¥ *'))),
+                Expanded(child: TextField(controller: price, keyboardType: TextInputType.number, inputFormatters: kCnNumber, decoration: const InputDecoration(labelText: '售价 ¥ *'))),
                 const SizedBox(width: 12),
-                Expanded(child: TextField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '现有库存 *'))),
+                Expanded(child: TextField(controller: stock, keyboardType: TextInputType.number, inputFormatters: kCnNumber, decoration: const InputDecoration(labelText: '现有库存 *'))),
               ]),
               const SizedBox(height: 12),
               Wrap(spacing: 8, runSpacing: 8, children: [
@@ -666,7 +666,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
               Expanded(
                 child: TextField(
                   controller: qtyCtl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber,
                   decoration: InputDecoration(labelText: '数量（${item.product.unit}）'),
                 ),
               ),
@@ -675,7 +675,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                 child: TextField(
                   controller: priceCtl,
                   autofocus: true,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber,
                   decoration: const InputDecoration(labelText: '单价 ¥'),
                 ),
               ),
@@ -748,6 +748,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
       if (go != true) return;
     }
     double? paid = double.tryParse(_paid.text);
+    // 兜底：选了挂账但实收空着（草稿恢复等路径）——挂账的语义就是没收钱
+    if (_settlement == '挂账' && paid == null) paid = 0;
     double? extraDiscount;
     // 实收<应收 且没选挂账：到底是抹零还是欠款？不问清楚会生出一堆"永远还不掉的3块钱"
     final diff = paid == null ? 0.0 : double.parse((_actual - paid).toStringAsFixed(2));
@@ -792,9 +794,19 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         _draftTimer?.cancel();
         SharedPreferences.getInstance().then((sp) => sp.remove(_draftKey));
         HapticFeedback.mediumImpact(); // 收银的"叮"感
-        _toast(neg.isEmpty ? '✓ 开单成功，库存已扣减' : '✓ 开单成功。${neg.join("、")} 已成负库存，记得补录进货');
-        // 留存钩子：开单成功的高光时刻，一次性引导开通收摊提醒（终生只弹一次，拒绝不再烦）
+        // 一次性引导先走完、提示后发——反过来 SnackBar 会被弹窗压住，关掉弹窗时早过期了。
+        // 真实新用户第一单常常两件事同时发生（首单触发引导弹窗 + 没录库存卖成负数），
+        // 负库存提醒恰好总被吃掉（真人测试发现的时序 bug）
         await _maybeAskDailyNotice();
+        if (neg.isEmpty) {
+          _toast('✓ 开单成功，库存已扣减');
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('✓ 开单成功，但卖超了：${neg.join('、')}，记得补录进货'),
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 7),
+          ));
+        }
         if (mounted && context.canPop()) context.pop();
       }
     } catch (e) {
@@ -947,7 +959,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
               Expanded(
                 child: TextField(
                   controller: _discountRate,
-                  keyboardType: TextInputType.number,
+                  keyboardType: TextInputType.number, inputFormatters: kCnNumber,
                   decoration: const InputDecoration(labelText: '折扣（如95=95折）'),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -956,7 +968,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
               Expanded(
                 child: TextField(
                   controller: _paid,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber,
                   // 标签只留字段名，动态默认值放 hint——否则浮起来的标签又长又跳
                   decoration: InputDecoration(labelText: '实收 ¥', hintText: '默认 ${_actual.toStringAsFixed(2)}'),
                   onChanged: (_) => setState(() {}),
@@ -979,9 +991,28 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                 ChoiceChip(
                   label: Text(acc),
                   selected: _settlement == acc,
-                  onSelected: (_) => setState(() => _settlement = _settlement == acc ? null : acc),
+                  onSelected: (_) => setState(() {
+                    final was = _settlement;
+                    _settlement = _settlement == acc ? null : acc;
+                    // 「挂账」不是收款方式，是"没收钱"。选中它实收自动清零（可再改成部分收款）；
+                    // 之前不清零：实收空=默认全款，系统记成"全款收讫，方式叫挂账"——
+                    // 钱看着收齐了、欠款是 0、资金流水里还多一笔不存在的收入（真实测试撞出来的）
+                    if (_settlement == '挂账' && was != '挂账') {
+                      _paid.text = '0';
+                    } else if (was == '挂账' && _settlement != '挂账' && _paid.text == '0') {
+                      _paid.clear(); // 切走时若还是自动填的 0，恢复默认全款
+                    }
+                  }),
                 ),
             ]),
+            if (_settlement == '挂账' && _customer == null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                // 服务端有硬闸：散客单必须当场结清（不知道该找谁收的欠款=坏账）。
+                // 这里提前说清楚，别让他填完一切在提交时才被打回
+                child: Text('散客不能挂账——不知道该找谁收。点上面「卖给谁」选个客户再挂',
+                    style: t.bodyMedium?.copyWith(fontSize: 12, color: AppColors.warning)),
+              ),
           ],
         ],
       ),

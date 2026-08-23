@@ -14,7 +14,7 @@ const _seedCount = 45; // 要大于一页(30)，才测得出翻页
 const _typeName = '__分页测试品类__';
 const _namePrefix = '__分页测试品';
 
-late int _typeId;
+int? _typeId; // 可空：setUpAll 半路失败时 tearDown 不再炸 LateInitializationError
 
 /// 等 notifier 首屏加载完
 Future<ProductPage> _firstPage(ProductListNotifier n) async {
@@ -31,6 +31,18 @@ void main() {
   SharedPreferences.setMockInitialValues({});
   // flutter test 默认把所有 HTTP 拦成 400，这里放行——本测试就是要打真后端
   HttpOverrides.global = null;
+
+  // ★ 保命闸：这个测试会真建 45 个商品再删。api.dart 的默认地址指生产
+  //（防 release 废包的刻意设计），所以不带 dart-define 直接跑 = 打生产。
+  // 生产没有 admin/admin123 才侥幸没出事——闸门装在这，永远别赌下一次。
+  if (!Api.baseUrl.contains('localhost') && !Api.baseUrl.contains('127.0.0.1')) {
+    test('分页真跑测试需要本地后端（已跳过）', () {
+      markTestSkipped('API_BASE 当前指向 ${Api.baseUrl}，会写真数据，拒绝执行。\n'
+          '正确跑法：flutter test test/product_pagination_test.dart '
+          '--dart-define=API_BASE=http://localhost:3100/api/v1');
+    });
+    return;
+  }
 
   setUpAll(() async {
     final auth = await Api.I.post('/auth/login', data: {'username': 'admin', 'password': 'admin123'});
@@ -56,6 +68,7 @@ void main() {
   });
 
   tearDownAll(() async {
+    if (_typeId == null) return; // setUpAll 没走完就没建过数据，无需清理
     // 删商品再删品类，不留垃圾
     final d = await Api.I.get('/products', query: {'productTypeId': _typeId, 'pageSize': 500});
     for (final p in (d['list'] as List)) {

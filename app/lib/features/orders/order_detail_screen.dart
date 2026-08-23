@@ -123,7 +123,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
             TextField(
               controller: amount,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber,
               decoration: const InputDecoration(labelText: '收款金额 ¥'),
               onChanged: (_) => setModal(() {}),
             ),

@@ -62,7 +62,7 @@ class DashboardScreen extends ConsumerWidget {
               TextField(
                 controller: amount,
                 autofocus: true,
-                keyboardType: TextInputType.number,
+                keyboardType: TextInputType.number, inputFormatters: kCnNumber,
                 decoration: const InputDecoration(labelText: '营业额 ¥'),
               ),
               const SizedBox(height: 12),

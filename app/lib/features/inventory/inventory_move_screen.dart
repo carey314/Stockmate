@@ -223,7 +223,7 @@ class _InventoryMoveScreenState extends ConsumerState<InventoryMoveScreen> {
                     width: 72,
                     child: TextField(
                       controller: l.qty,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber,
                       textAlign: TextAlign.center,
                       decoration: InputDecoration(
                         isDense: true,

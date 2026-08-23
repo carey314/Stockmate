@@ -130,7 +130,7 @@ class _PurchaseOrderDetailScreenState extends ConsumerState<PurchaseOrderDetailS
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('付欠款（欠 ¥${_money.format(unpaid)}）', style: Theme.of(ctx).textTheme.headlineMedium),
             const SizedBox(height: 16),
-            TextField(controller: amount, autofocus: true, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '付款金额 ¥')),
+            TextField(controller: amount, autofocus: true, keyboardType: TextInputType.number, inputFormatters: kCnNumber, decoration: const InputDecoration(labelText: '付款金额 ¥')),
             const SizedBox(height: 12),
             Wrap(spacing: 8, children: [
               for (final a in ['现金', '微信', '支付宝', '银行卡'])

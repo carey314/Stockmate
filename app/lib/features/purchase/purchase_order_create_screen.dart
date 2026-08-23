@@ -380,7 +380,7 @@ class _PurchaseOrderCreateScreenState extends ConsumerState<PurchaseOrderCreateS
             const SizedBox(height: 14),
             TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: '商品名称 *')),
             const SizedBox(height: 10),
-            TextField(controller: price, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: '零售价 ¥（可先不填）')),
+            TextField(controller: price, keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber, decoration: const InputDecoration(labelText: '零售价 ¥（可先不填）')),
             const SizedBox(height: 12),
             Wrap(spacing: 6, runSpacing: 6, children: [
               for (final tp in types)
@@ -466,9 +466,9 @@ class _PurchaseOrderCreateScreenState extends ConsumerState<PurchaseOrderCreateS
               style: Theme.of(ctx).textTheme.headlineMedium),
           const SizedBox(height: 16),
           Row(children: [
-            Expanded(child: TextField(controller: qty, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: '数量'))),
+            Expanded(child: TextField(controller: qty, keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber, decoration: const InputDecoration(labelText: '数量'))),
             const SizedBox(width: 12),
-            Expanded(child: TextField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '进价 ¥'))),
+            Expanded(child: TextField(controller: price, keyboardType: TextInputType.number, inputFormatters: kCnNumber, decoration: const InputDecoration(labelText: '进价 ¥'))),
           ]),
           const SizedBox(height: 16),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确定')),
@@ -609,7 +609,7 @@ class _PurchaseOrderCreateScreenState extends ConsumerState<PurchaseOrderCreateS
             const SizedBox(height: 10),
             TextField(
               controller: _paid,
-              keyboardType: TextInputType.number,
+              keyboardType: TextInputType.number, inputFormatters: kCnNumber,
               decoration: InputDecoration(
                   labelText: '已付 ¥', hintText: '默认付清 ${_total.toStringAsFixed(2)}，少付=欠供应商'),
               onChanged: (_) => setState(() {}),

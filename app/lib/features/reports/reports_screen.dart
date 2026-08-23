@@ -443,10 +443,21 @@ class _InventoryCard extends ConsumerWidget {
           final byType = List<Map<String, dynamic>>.from(d['byType'] ?? []);
           final low = List<Map<String, dynamic>>.from(d['lowStock'] ?? []);
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Text('¥${_money.format(d['totalValue'])}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+            // 金额可能到千万级（¥29,245,203 实测撑爆过一次）：
+            // 数字用 FittedBox 缩着放，说明文字 Expanded 兜底截断——多长都不溢出
+            Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('¥${_money.format(d['totalValue'])}',
+                      maxLines: 1,
+                      style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+                ),
+              ),
               const SizedBox(width: 8),
-              Text('库存成本总值 · ${d['totalStock']}件', style: t.bodyMedium?.copyWith(fontSize: 12)),
+              Text('库存成本总值 · ${d['totalStock']}件',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: t.bodyMedium?.copyWith(fontSize: 12)),
             ]),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [

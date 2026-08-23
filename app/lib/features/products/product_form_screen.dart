@@ -296,7 +296,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                           child: TextField(
-                              controller: _price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '售价 ¥'))),
+                              controller: _price, keyboardType: TextInputType.number, inputFormatters: kCnNumber, decoration: const InputDecoration(labelText: '售价 ¥'))),
                     ],
                   ]),
                   if (!hasSpecDims) ...[
@@ -305,13 +305,13 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       Expanded(
                           child: TextField(
                               controller: _cost,
-                              keyboardType: TextInputType.number,
+                              keyboardType: TextInputType.number, inputFormatters: kCnNumber,
                               decoration: const InputDecoration(labelText: '成本价 ¥（选填）'))),
                       const SizedBox(width: 12),
                       Expanded(
                           child: TextField(
                               controller: _minQty,
-                              keyboardType: TextInputType.number,
+                              keyboardType: TextInputType.number, inputFormatters: kCnNumber,
                               decoration: const InputDecoration(labelText: '预警线（选填）'))),
                     ]),
                   ],
@@ -389,7 +389,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                                 width: 68,
                                 child: TextField(
                                   controller: _stockCtl(i),
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber,
                                   textAlign: TextAlign.center,
                                   onChanged: (_) => setState(() {}),
                                   decoration: InputDecoration(
@@ -544,7 +544,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 ],
                 TextField(
                   controller: priceCtl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber,
                   decoration: const InputDecoration(labelText: '统一售价 ¥（生成后可逐个改）'),
                 ),
                 const SizedBox(height: 14),
@@ -642,7 +642,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       child: TextField(
                         controller: TextEditingController(text: fmtQty((c['qty'] as num).toDouble()))
                           ..selection = TextSelection.collapsed(offset: fmtQty((c['qty'] as num).toDouble()).length),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber,
                         textAlign: TextAlign.center,
                         onChanged: (v) => c['qty'] = double.tryParse(v) ?? c['qty'],
                         decoration: const InputDecoration(isDense: true),
@@ -747,11 +747,11 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 Row(children: [
                   Expanded(
                       child: TextField(
-                          controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '售价 ¥ *'))),
+                          controller: price, keyboardType: TextInputType.number, inputFormatters: kCnNumber, decoration: const InputDecoration(labelText: '售价 ¥ *'))),
                   const SizedBox(width: 12),
                   Expanded(
                       child: TextField(
-                          controller: cost, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '成本 ¥'))),
+                          controller: cost, keyboardType: TextInputType.number, inputFormatters: kCnNumber, decoration: const InputDecoration(labelText: '成本 ¥'))),
                 ]),
                 const SizedBox(height: 12),
                 TextField(controller: barcode, decoration: const InputDecoration(labelText: '条形码（选填，扫码用）')),
@@ -789,7 +789,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: minQty,
-                  keyboardType: TextInputType.number,
+                  keyboardType: TextInputType.number, inputFormatters: kCnNumber,
                   decoration: const InputDecoration(labelText: '预警线', hintText: '低于这个数提醒补货'),
                 ),
                 const SizedBox(height: 8),
@@ -926,7 +926,7 @@ class DynamicFieldInput extends StatelessWidget {
       case 'number':
         return TextFormField(
           initialValue: value?.toString() ?? '',
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: kCnNumber,
           decoration: InputDecoration(labelText: label, suffixText: field.unit),
           onChanged: (v) => onChanged(double.tryParse(v)),
         );

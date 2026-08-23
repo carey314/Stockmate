@@ -29,13 +29,15 @@ Future<bool> _waitFor(WidgetTester t, Finder f, {int tries = 40}) async {
   return false;
 }
 
+/// 一直往回退，退到没有返回键为止（最多 4 层）。
+/// 之前只退一层且不校验结果：一次 miss 之后所有后续 tap 全打在被盖住的页面上，
+/// 报出来的是一串莫名其妙的"点不中"——导航测试必须自愈。
 Future<void> _back(WidgetTester t) async {
-  for (final f in [find.byTooltip('返回'), find.byTooltip('Back'), find.byType(BackButton)]) {
-    if (f.evaluate().isNotEmpty) {
-      await t.tap(f.first);
-      await _pumpFor(t, const Duration(seconds: 2));
-      return;
-    }
+  for (var i = 0; i < 4; i++) {
+    final f = find.byType(BackButton);
+    if (f.evaluate().isEmpty) return;
+    await t.tap(f.first, warnIfMissed: false);
+    await _pumpFor(t, const Duration(seconds: 2));
   }
 }
 
@@ -99,10 +101,12 @@ void main() {
     }
 
     // ② 开单页（底部结算栏 + 购物车行，按钮最密集的一屏）
+    // 不用 byIcon(...).first：IndexedStack 五个 Tab 全活着，商品页的 + FAB 同样在树里，
+    // .first 会点到离屏那个（miss 警告的根源）。FAB 文字「开单」全树唯一
     await t.tap(find.byIcon(Icons.receipt_long_rounded).first);
     await _pumpFor(t, const Duration(seconds: 1));
-    if (await _waitFor(t, find.byIcon(Icons.add_rounded))) {
-      await t.tap(find.byIcon(Icons.add_rounded).first);
+    if (await _waitFor(t, find.text('开单'), tries: 12)) {
+      await t.tap(find.text('开单').last);
       await _waitFor(t, find.text('提交订单'));
       await _pumpFor(t, const Duration(seconds: 5)); // 等草稿恢复
       await _back(t);
@@ -117,17 +121,18 @@ void main() {
     }
 
     // ④ 「我的」里的二级页（各自都有底部按钮或密集横排）
-    await t.tap(find.text('我的').last);
+    await _back(t); // 上面任何一步卡了路由，这里先清干净再切 Tab
+    await t.tap(find.text('我的').last, warnIfMissed: false);
     await _pumpFor(t, const Duration(seconds: 2));
     for (final entry in ['报表中心', '品类管理', '进货单', '盘点单', '出入库（报损/自用）', '客户（欠款/对账）', 'AI 口述记账', '关于智存']) {
-      if (find.text(entry).evaluate().isEmpty) {
-        await t.drag(find.byType(ListView).first, const Offset(0, -220));
+      if (find.text(entry).evaluate().isEmpty && find.byType(ListView).evaluate().isNotEmpty) {
+        await t.drag(find.byType(ListView).last, const Offset(0, -220));
         await _pumpFor(t, const Duration(milliseconds: 600));
       }
       if (find.text(entry).evaluate().isEmpty) continue;
-      await t.tap(find.text(entry));
+      await t.tap(find.text(entry), warnIfMissed: false);
       await _pumpFor(t, const Duration(seconds: 3));
-      await _back(t);
+      await _back(t); // 自愈式：退到底
       await _pumpFor(t, const Duration(seconds: 1));
     }
 

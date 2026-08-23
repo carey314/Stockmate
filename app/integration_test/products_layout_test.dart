@@ -13,12 +13,47 @@ Future<void> _pumpFor(WidgetTester t, Duration d) async {
   while (DateTime.now().isBefore(end)) { await t.pump(const Duration(milliseconds: 200)); }
 }
 
+int? _negOrderId; // 造负库存用的超卖单，tearDown 作废它=库存自动还原
+String _negProductName = '';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
     final a = await Api.I.post('/auth/login', data: {'username': 'admin', 'password': 'admin123'});
     await Api.I.setToken(a['token']);
     (await SharedPreferences.getInstance()).setBool('privacy_agreed_v1', true);
+
+    // 自己造负库存，不赌环境里恰好有（数据漂移把这个测试红过一次）：
+    // 开一张超卖散客单把某个规格打成负数；作废即精确还原，无需手写恢复
+    final ps = await Api.I.get('/products?page=1&pageSize=50');
+    final list = (ps['list'] as List).cast<Map<String, dynamic>>();
+    Map<String, dynamic>? prod = list.firstWhere(
+      (p) => (p['name'] as String).contains('古越') && (p['skus'] as List).isNotEmpty,
+      orElse: () => list.firstWhere((p) => (p['skus'] as List).isNotEmpty),
+    );
+    final sku = (prod['skus'] as List).first as Map<String, dynamic>;
+    final stock = ((sku['inventory']?['quantity'] as num?) ?? 0).toDouble();
+    final sellQty = (stock > 0 ? stock : 0) + 3; // 保证卖完必是负数
+    final price = ((sku['price'] as num?) ?? 1).toDouble();
+    final total = double.parse((sellQty * (price > 0 ? price : 1)).toStringAsFixed(2));
+    final created = await Api.I.post('/orders', data: {
+      'items': [{'skuId': sku['id'], 'quantity': sellQty, 'unitPrice': price > 0 ? price : 1}],
+      'paidAmount': total, // 散客必须结清
+      'settlementAccount': '现金',
+      'notes': '自动化测试-负库存布局，勿动',
+    });
+    _negOrderId = created['id'] as int;
+    _negProductName = prod['name'] as String;
+    // ignore: avoid_print
+    print('已造负库存：$_negProductName（超卖单 #$_negOrderId）');
+  });
+
+  tearDownAll(() async {
+    if (_negOrderId != null) {
+      await Api.I.put('/orders/$_negOrderId/cancel');
+      // ignore: avoid_print
+      print('✓ 已作废超卖单 #$_negOrderId，库存还原');
+    }
   });
   testWidgets('商品列表：标题不重复 / 负库存报警 / 单规格不重复报库存', (t) async {
     await t.pumpWidget(const ProviderScope(child: StockMateApp()));
@@ -55,7 +90,7 @@ void main() {
     // 回到顶部，切「全部」+ 搜索，验证负库存警示和去重
     await t.drag(find.byType(Scrollable).first, const Offset(0, 400));
     await _pumpFor(t, const Duration(seconds: 2));
-    await t.enterText(find.byType(TextField).first, '古越');
+    await t.enterText(find.byType(TextField).first, _negProductName);
     await _pumpFor(t, const Duration(seconds: 4));
     expect(find.textContaining('卖超了'), findsWidgets, reason: '★ 负库存商品应显示"卖超了"警示');
     expect(find.textContaining('库存-5'), findsNothing, reason: '★ 单规格不该再用 chip 把库存说第二遍');
