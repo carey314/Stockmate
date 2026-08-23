@@ -191,9 +191,8 @@ export default function ProductsPage() {
   // ===== 行内直改 =====
   const patchSku = (skuId: number, patch: Partial<SkuRow> & { quantity?: number; minQuantity?: number }) => {
     setRows((prev) =>
-      prev.map((p) => ({
-        ...p,
-        skus: p.skus.map((s) => {
+      prev.map((p) => {
+        const skus = p.skus.map((s) => {
           if (s.id !== skuId) return s
           const { quantity, minQuantity, ...skuPatch } = patch
           return {
@@ -207,8 +206,10 @@ export default function ProductsPage() {
                   }
                 : s.inventory,
           }
-        }),
-      })),
+        })
+        // 主行「库存合计」是后端算好的 totalStock，行内直改后必须同步重算，否则合计停在旧值
+        return { ...p, skus, totalStock: skus.reduce((n, x) => n + (x.inventory?.quantity ?? 0), 0) }
+      }),
     )
   }
 
