@@ -19,19 +19,15 @@ class AboutScreen extends StatelessWidget {
         children: [
           Center(
             child: Column(children: [
-              Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryContainer]),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 40),
+              // 真实 App 图标（与桌面一致），不再用代码画的星星方块
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.asset('assets/brand/icon.png', width: 84, height: 84),
               ),
               const SizedBox(height: 14),
-              Text('智存 StockMate', style: t.titleLarge),
+              Text('智存', style: t.titleLarge),
               const SizedBox(height: 4),
-              Text('AI 原生 · 什么生意都能管的进销存', style: t.bodyMedium),
+              Text('说一句话，账就记好了', style: t.bodyMedium),
               const SizedBox(height: 6),
               Text('版本 ${CrashReport.appVersion}', style: t.bodyMedium?.copyWith(fontSize: 12)),
             ]),

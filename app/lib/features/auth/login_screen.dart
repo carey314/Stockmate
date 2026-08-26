@@ -135,23 +135,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            // 全列居中：原来品牌区左对齐、按钮和链接居中，两套对齐混在一页很不协调。
+            // 登录页只有一件事（进来），经典的居中式最稳
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Spacer(flex: 2),
-              // 品牌区
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [AppColors.primary, Color(0xFF6A5AE0)]),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 30),
+              // 品牌区：用真实 App 图标资源——原来是代码画的星星方块，
+              // 和桌面图标对不上号，用户装完点进来会觉得"这是同一个 App 吗"
+              ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Image.asset('assets/brand/icon.png', width: 88, height: 88),
               ),
-              const SizedBox(height: 24),
-              Text('StockMate 智存', style: t.headlineLarge),
+              const SizedBox(height: 20),
+              Text('智存', style: t.headlineLarge),
               const SizedBox(height: 8),
-              Text('AI 原生 · 什么生意都能管的进销存', style: t.bodyMedium),
+              // 副标题说人话。「AI 原生」是开发者黑话，摊主看不懂；
+              // 顺带降低登录页的 AI 存在感（中国区生成式 AI 合规语境下没必要冲在脸上）
+              Text('说一句话，账就记好了', style: t.bodyMedium),
               const Spacer(),
               TextField(
                 controller: _username,
