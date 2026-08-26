@@ -297,6 +297,8 @@ export default function LoginPage() {
               <div style={{ fontSize: 12, opacity: 0.65 }}>
                 {t('扫码开单、语音记账都在手机上——上架后这里放下载二维码', 'Scan-to-sell and voice entry live on mobile — QR code here once live')}
               </div>
+              {/* App 备案号（2026-08-26 下发）；网站备案 -1 在页脚，两个号不同属正常 */}
+              <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>{t('App 备案：鲁ICP备2026014341号-3A', 'App ICP: 鲁ICP备2026014341号-3A')}</div>
             </div>
           </div>
           <div style={{ marginTop: 28, fontSize: 12, opacity: 0.6 }}>
