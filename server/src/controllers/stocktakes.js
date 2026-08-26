@@ -15,7 +15,10 @@ const createSchema = z.object({
   productTypeId: z.number().int().nullish(),
   notes: z.string().max(200).nullish(),
   items: z
-    .array(z.object({ skuId: z.number().int(), actualQty: z.number().nonnegative() }))
+    // actualQty 不在 schema 层卡非负：账面为负的行（卖超未补录）没动过时会按账面原样上送，
+    // 一刀切拒掉会把整张盘点单堵死（真人测试踩到：轩尼诗账面 -1，提交整单报英文参数错误）。
+    // 负数的合法性在下面按行判——那里拿得到商品名，报错能说人话。
+    .array(z.object({ skuId: z.number().int(), actualQty: z.number() }))
     .min(1, '至少要盘一个商品'),
 });
 
@@ -36,6 +39,14 @@ exports.create = async (req, res) => {
       const systemQty = sku.inventory?.quantity ?? 0;
       return { sku, systemQty, actualQty: it.actualQty, diff: it.actualQty - systemQty };
     });
+    // 实盘数不能是负数——货架上数不出 -1 瓶。唯一放行：账面本来就是负的且没动过
+    // （actual == 账面，diff=0），语义是"这项没法盘，保持现状"，记为盘平不动库存。
+    // 卖超的负库存应该走「进货单/出入库」补录修正，不允许在盘点里硬填负数。
+    const badNeg = rows.find((r) => r.actualQty < 0 && r.diff !== 0);
+    if (badNeg) {
+      const label = `${badNeg.sku.product.name}${badNeg.sku.specText ? ` ${badNeg.sku.specText}` : ''}`;
+      throw httpError(400, `「${label}」的实盘数不能填负数。它账面是 ${badNeg.systemQty}，先在这行保持不动，用进货单把欠的货补录进来再盘`);
+    }
     const diffRows = rows.filter((r) => r.diff !== 0);
 
     const st = await tx.stocktake.create({
