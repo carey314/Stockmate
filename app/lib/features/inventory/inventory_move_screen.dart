@@ -24,7 +24,9 @@ class _MoveLine {
 }
 
 const _outReasons = ['报损', '过期', '损坏', '自用', '送人', '盘亏纠错'];
-const _inReasons = ['盘盈纠错', '客户退回', '自用退回', '其他入库'];
+// 「自己做了一批」放第一位：私房/自制类用户（包馄饨、烘焙）的日常生产就是它，
+// 原来只能委屈选"其他入库"——软件等于在说"你的日常是个'其他'"（真人测试反馈）
+const _inReasons = ['自己做了一批', '盘盈纠错', '客户退回', '自用退回', '其他入库'];
 
 class _InventoryMoveScreenState extends ConsumerState<InventoryMoveScreen> {
   String _type = 'outbound'; // 高频是出库（报损/自用）
@@ -197,6 +199,16 @@ class _InventoryMoveScreenState extends ConsumerState<InventoryMoveScreen> {
             for (final r in _reasons)
               ChoiceChip(label: Text(r), selected: _reason == r, onSelected: (_) => setState(() => _reason = r)),
           ]),
+          // 自制入库的成本坑要当场提醒：这里入库不记钱，商品没填成本价的话
+          // 卖出后利润是虚高的——王姐看着"赚了"，其实面粉肉馅的钱没算进去
+          if (_reason == '自己做了一批') ...[
+            const SizedBox(height: 8),
+            Text(
+              '提示：自制的货记得在商品资料里填「成本价」（一盒的料钱），卖出后利润才是真的。'
+              '想更省事，给商品设「配方」后卖一盒自动扣原料，连这里都不用来。',
+              style: t.bodyMedium?.copyWith(fontSize: 12, color: AppColors.warning),
+            ),
+          ],
           const SizedBox(height: 14),
           Row(children: [
             Expanded(child: Text('商品（${_lines.length}）', style: t.titleMedium)),
