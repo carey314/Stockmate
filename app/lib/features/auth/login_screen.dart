@@ -234,6 +234,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
+              // 工信部备案号：显著位置展示（关于页也有一处）
+              if (icpFiling.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Center(
+                  child: Text(icpFiling,
+                      style: const TextStyle(fontSize: 11, color: Color(0xFFB9B9C6))),
+                ),
+              ],
               const SizedBox(height: 8),
             ],
           ),

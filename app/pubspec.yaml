@@ -1,7 +1,7 @@
 name: stockmate
 description: "AI 原生多场景进销存"
 publish_to: 'none'
-version: 1.0.0+1   # TestFlight 每次上传 build 号(+后面)必须递增
+version: 1.0.0+2   # TestFlight 每次上传 build 号(+后面)必须递增
 
 environment:
   sdk: ^3.12.0

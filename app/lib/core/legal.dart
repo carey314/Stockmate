@@ -12,9 +12,8 @@ const termsUrl = 'https://qxju.shop/stockmate/terms';
 const supportUrl = 'https://qxju.shop/stockmate/support';
 const _agreedKey = 'privacy_agreed_v1';
 
-/// 工信部 App 备案号。备案通过后把号填在这里即可（工信部要求 App 内显著位置展示）。
-/// 例：'京ICP备2026XXXXXX号-2A'
-const icpFiling = '';
+/// 工信部 App 备案号（2026-08-26 备案通过）。展示位置：关于页 + 登录页底部。
+const icpFiling = '鲁ICP备2026014341号-3A';
 
 Future<void> openLegal(String url) async {
   await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
