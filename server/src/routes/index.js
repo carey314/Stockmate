@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { auth, adminOnly } = require('../middlewares/auth');
-const { authLimiter, aiLimiter } = require('../middlewares/rateLimit');
+const { authLimiter, aiLimiter, registerHourLimiter, registerDayLimiter, aiIpDayLimiter } = require('../middlewares/rateLimit');
 const { aiMeter } = require('../middlewares/aiMeter');
 const { wrap } = require('../utils/response');
 
@@ -43,7 +43,7 @@ r.post('/upload', auth, upload.single('file'), (req, res) => {
 // 认证
 r.post('/client-logs', wrap(require('../controllers/clientLog').report)); // 崩溃上报(无需登录)
 r.post('/auth/login', authLimiter, wrap(authCtl.login));
-r.post('/auth/register', authLimiter, wrap(authCtl.register)); // 用户名密码注册(注册即登录)
+r.post('/auth/register', registerHourLimiter, registerDayLimiter, wrap(authCtl.register)); // 注册即登录；双窗口限流防刷号
 r.post('/auth/oauth', authLimiter, wrap(authCtl.oauthLogin)); // 平台账号登录(apple已实现/huawei/wechat待接)
 r.get('/auth/profile', auth, wrap(authCtl.profile));
 r.get('/me/entitlement', auth, wrap(require('../controllers/entitlement').mine)); // 当前权益+本月AI用量
@@ -64,12 +64,12 @@ r.put('/product-types/:id/fields/:fieldId', auth, wrap(typesCtl.updateField));
 r.delete('/product-types/:id/fields/:fieldId', auth, wrap(typesCtl.removeField));
 
 // AI
-r.post('/ai/generate-fields', auth, aiLimiter, aiMeter('generate-fields'), wrap(aiCtl.generateFields)); // 两层字段(fields+specs)
-r.post('/ai/generate-products', auth, aiLimiter, aiMeter('generate-products'), wrap(aiCtl.generateProducts)); // 按品类生成商品建议
-r.post('/ai/import-products', auth, aiLimiter, aiMeter('import-products'), wrap(aiCtl.importProducts)); // 粘贴任意表格文字→商品清单草案
-r.post('/ai/ask', auth, adminOnly, aiLimiter, aiMeter('ask'), wrap(aiCtl.ask)); // AI问生意(经营快照含利润/欠款,仅老板)
-r.post('/ai/parse-entry', auth, aiLimiter, aiMeter('parse-entry'), wrap(aiParseCtl.parseEntry)); // 口述→结构化草案
-r.post('/ai/confirm-entry', auth, aiLimiter, aiMeter('confirm-entry'), wrap(aiParseCtl.confirmEntry)); // 确认落库
+r.post('/ai/generate-fields', auth, aiIpDayLimiter, aiLimiter, aiMeter('generate-fields'), wrap(aiCtl.generateFields)); // 两层字段(fields+specs)
+r.post('/ai/generate-products', auth, aiIpDayLimiter, aiLimiter, aiMeter('generate-products'), wrap(aiCtl.generateProducts)); // 按品类生成商品建议
+r.post('/ai/import-products', auth, aiIpDayLimiter, aiLimiter, aiMeter('import-products'), wrap(aiCtl.importProducts)); // 粘贴任意表格文字→商品清单草案
+r.post('/ai/ask', auth, adminOnly, aiIpDayLimiter, aiLimiter, aiMeter('ask'), wrap(aiCtl.ask)); // AI问生意(经营快照含利润/欠款,仅老板)
+r.post('/ai/parse-entry', auth, aiIpDayLimiter, aiLimiter, aiMeter('parse-entry'), wrap(aiParseCtl.parseEntry)); // 口述→结构化草案
+r.post('/ai/confirm-entry', auth, aiIpDayLimiter, aiLimiter, aiMeter('confirm-entry'), wrap(aiParseCtl.confirmEntry)); // 确认落库
 
 // 收入流水（日结营业额等）
 r.get('/incomes', auth, wrap(incomesCtl.list));

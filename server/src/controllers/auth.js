@@ -71,6 +71,17 @@ exports.register = async (req, res) => {
       return u;
     });
   });
+  // 注册哨兵：刷号的最早信号是"单日注册量异常放大"。不在这里阻断（阻断交给限流），
+  // 只负责让人看见——pm2 logs 里一行 warn，够当天发现当天止血（ALLOW_REGISTRATION=false）
+  try {
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const todayCount = await prisma.user.count({ where: { createdAt: { gte: dayStart } } });
+    const alertAt = Number(process.env.REG_ALERT_THRESHOLD) || 50;
+    if (todayCount >= alertAt) {
+      console.warn(`[注册哨兵] 今日已注册 ${todayCount} 个账号（阈值 ${alertAt}）。若非推广日，怀疑脚本刷号：查日志里的 IP，必要时 .env 置 ALLOW_REGISTRATION=false 止血`);
+    }
+  } catch (_) { /* 哨兵挂了不影响注册本身 */ }
   return ok(res, {
     token: issueJwt(user),
     user: { id: user.id, username: user.username, realName: user.realName, role: user.role },
