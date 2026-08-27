@@ -48,6 +48,28 @@ Future<void> showCelebration(
   );
 }
 
+/// 跨路由重建的"寄存式"庆祝。
+///
+/// 为什么需要它：注册成功的瞬间 authProvider 翻转 → 路由 Provider 重建 →
+/// **整个 GoRouter 连 Navigator 都是新造的**——当场 showCelebration 弹出的对话框
+/// 挂在旧 Navigator 上，下一帧就随旧树陪葬（集成测试抓到的：彩蛋根本没出现过）。
+/// 所以注册侧只"寄存"，新路由树里的首页第一帧再取走播放。
+class PendingCelebration {
+  static ({IconData icon, String title, String subtitle})? _pending;
+
+  static void set({required IconData icon, required String title, required String subtitle}) {
+    _pending = (icon: icon, title: title, subtitle: subtitle);
+  }
+
+  /// 有寄存就播放并清空；没有就什么都不做（首页每次 build 调用都安全）
+  static void takeAndShow(BuildContext context) {
+    final p = _pending;
+    if (p == null) return;
+    _pending = null;
+    showCelebration(context, icon: p.icon, title: p.title, subtitle: p.subtitle);
+  }
+}
+
 class _CelebrationView extends StatefulWidget {
   final IconData icon;
   final String title;

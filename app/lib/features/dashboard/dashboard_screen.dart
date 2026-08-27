@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/api.dart';
+import '../../core/celebration.dart';
 import '../../core/local_notice.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -100,6 +101,11 @@ class DashboardScreen extends ConsumerWidget {
       _noticeRefreshed = true;
       LocalNotice.I.applySchedule(); // fire-and-forget，没开提醒时内部直接 return
     }
+    // 注册寄存的开张彩蛋在这里播放（takeAndShow 幂等，无寄存时零开销）——
+    // 注册后路由整树重建，只有新树里的首页能安全地弹对话框
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) PendingCelebration.takeAndShow(context);
+    });
     final t = Theme.of(context).textTheme;
     final overview = ref.watch(overviewProvider);
 

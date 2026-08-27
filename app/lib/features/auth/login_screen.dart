@@ -42,15 +42,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         try {
           await ref.read(authProvider.notifier).register(username, _password.text, _realName.text.trim());
           ref.invalidate(profileProvider);
-          // 开张仪式：庆祝层挂根导航，路由切到首页也盖得住；
-          // 自动收场后落在首页的「三步开工」上，仪式感和引导正好接力
+          // 开张仪式：不能当场弹——注册后路由整个重建，当场弹的对话框随旧树陪葬
+          // （集成测试抓到的）。寄存给首页，新树第一帧播放，收场正好接三步开工
           final shopName = _realName.text.trim().isEmpty ? username : _realName.text.trim();
-          if (mounted) {
-            showCelebration(context,
-                icon: Icons.storefront_rounded,
-                title: '开张大吉',
-                subtitle: '「$shopName」建好了\n说一句话，第一笔账就记好了');
-          }
+          PendingCelebration.set(
+              icon: Icons.storefront_rounded,
+              title: '开张大吉',
+              subtitle: '「$shopName」建好了\n说一句话，第一笔账就记好了');
         } catch (e) {
           // 撞名兜底：如果这个名字+密码本来就是你的账号，直接登录进去
           if (e.toString().contains('已被注册')) {
