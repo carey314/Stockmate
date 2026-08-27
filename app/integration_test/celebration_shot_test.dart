@@ -23,6 +23,11 @@ void main() {
   });
 
   testWidgets('订阅解锁彩蛋（预览模式）', (t) async {
+    if (!const bool.fromEnvironment('IAP_PREVIEW')) {
+      markTestSkipped('需要 --dart-define=IAP_PREVIEW=true（无预览商品就没有开通按钮可点）。'
+          '套件默认不带此参数，跳过属预期；要跑就单独带参数跑。');
+      return;
+    }
     await t.pumpWidget(const ProviderScope(child: StockMateApp()));
     await _pumpFor(t, const Duration(seconds: 3));
     if (find.text('同意并继续').evaluate().isNotEmpty) {

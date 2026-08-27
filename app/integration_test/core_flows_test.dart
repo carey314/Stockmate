@@ -38,7 +38,11 @@ void main() {
 
   setUpAll(() async {
     // 预写隐私同意标记，绕过首启同意页（同意页本身由 widget 测试覆盖）
-    (await SharedPreferences.getInstance()).setBool('privacy_agreed_v1', true);
+    final sp = await SharedPreferences.getInstance();
+    sp.setBool('privacy_agreed_v1', true);
+    // 首单会先弹「收摊提醒」一次性引导再发成功提示（弹窗吃 toast 的修复改的时序）——
+    // 那不是本测试的被测对象，标记已弹过，专注开单主链路
+    sp.setBool('ln_prompted', true);
     // 登录 + 预置一张挂账单（收款流程的被测对象）
     final auth = await Api.I.post('/auth/login', data: {'username': 'admin', 'password': 'admin123'});
     await Api.I.setToken(auth['token']);
