@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/celebration.dart';
 import '../../core/legal.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -36,14 +37,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (_isRegister && _password.text != _confirm.text) return _toast('两次密码不一致');
 
     setState(() => _loading = true);
-    // 提前拿 messenger：登录成功后本页会被路由替换，但提示条挂在更上层，依然能弹出来
-    final messenger = ScaffoldMessenger.of(context);
     try {
       if (_isRegister) {
         try {
           await ref.read(authProvider.notifier).register(username, _password.text, _realName.text.trim());
           ref.invalidate(profileProvider);
-          messenger.showSnackBar(SnackBar(content: Text('🎉 注册成功，欢迎「${_realName.text.trim().isEmpty ? username : _realName.text.trim()}」开张！')));
+          // 开张仪式：庆祝层挂根导航，路由切到首页也盖得住；
+          // 自动收场后落在首页的「三步开工」上，仪式感和引导正好接力
+          final shopName = _realName.text.trim().isEmpty ? username : _realName.text.trim();
+          if (mounted) {
+            showCelebration(context,
+                icon: Icons.storefront_rounded,
+                title: '开张大吉',
+                subtitle: '「$shopName」建好了\n说一句话，第一笔账就记好了');
+          }
         } catch (e) {
           // 撞名兜底：如果这个名字+密码本来就是你的账号，直接登录进去
           if (e.toString().contains('已被注册')) {

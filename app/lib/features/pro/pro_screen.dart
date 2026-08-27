@@ -7,6 +7,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api.dart';
+import '../../core/celebration.dart';
 import '../../core/legal.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -157,9 +158,12 @@ class _ProScreenState extends ConsumerState<ProScreen> {
       ref.invalidate(entitlementProvider);
       if (!mounted) return;
       setState(() { _busy = false; _error = null; });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✓ 专业版已开通，AI 额度已放开')),
-      );
+      // 付了钱的时刻值得一场礼花，不是一条 toast——带按钮收场（确认式，不自动溜走）
+      showCelebration(context,
+          icon: Icons.workspace_premium_rounded,
+          title: '专业版已解锁',
+          subtitle: 'AI 口述记账不限次，放开用\n谢谢你支持一个小团队',
+          buttonLabel: '开始用');
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -171,6 +175,16 @@ class _ProScreenState extends ConsumerState<ProScreen> {
   }
 
   Future<void> _buy(ProductDetails p) async {
+    // 预览模式：假商品真买会直接异常。只演示解锁动画，绝不发权益——
+    // 这样模拟器里也能看到付款成功的彩蛋长什么样
+    if (_kPreviewIap) {
+      showCelebration(context,
+          icon: Icons.workspace_premium_rounded,
+          title: '专业版已解锁',
+          subtitle: 'AI 口述记账不限次，放开用\n（预览模式：仅演示动画，未真实开通）',
+          buttonLabel: '开始用');
+      return;
+    }
     setState(() { _busy = true; _error = null; });
     await _iap.buyNonConsumable(purchaseParam: PurchaseParam(productDetails: p));
   }
