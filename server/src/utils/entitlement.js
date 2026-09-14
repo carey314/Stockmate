@@ -16,7 +16,7 @@ const currentPlan = async (storeId) => {
   const id = storeId ?? getTenantId();
   if (!id) return { plan: PLAN_FREE, source: null, expiresAt: null };
   const now = new Date();
-  const e = await basePrisma.entitlement.findFirst({
+  const candidates = await basePrisma.entitlement.findMany({
     where: {
       storeId: id,
       status: 'active',
@@ -24,6 +24,7 @@ const currentPlan = async (storeId) => {
     },
     orderBy: [{ expiresAt: 'desc' }], // 有多条时取管得最久的那条
   });
+  const e=candidates.sort((a,b)=>(a.expiresAt==null?-1:b.expiresAt==null?1:b.expiresAt-a.expiresAt))[0];
   if (!e) return { plan: PLAN_FREE, source: null, expiresAt: null };
   return { plan: e.plan, source: e.source, expiresAt: e.expiresAt };
 };
@@ -33,10 +34,12 @@ const currentPlan = async (storeId) => {
 const grantEntitlement = async ({ storeId, plan, source, externalId = null, expiresAt = null, note = null }) => {
   if (!storeId || !plan || !source) throw new Error('grantEntitlement 缺少 storeId/plan/source');
   if (externalId) {
-    return basePrisma.entitlement.upsert({
-      where: { source_externalId: { source, externalId } },
-      create: { storeId, plan, source, externalId, expiresAt, note, status: 'active' },
-      update: { plan, expiresAt, status: 'active', note },
+    // 唯一键只能防重复，不能证明当前请求店铺就是原始交易所属店。
+    return require('./transaction').transaction(async tx => {
+      const existing=await tx.entitlement.findUnique({where:{source_externalId:{source,externalId}}});
+      if(existing && existing.storeId!==storeId)throw require('./biz').httpError(409,'该交易已绑定其他店铺，请回到购买时的店铺恢复');
+      if(existing)return tx.entitlement.update({where:{id:existing.id},data:{plan,expiresAt,status:'active',note}});
+      return tx.entitlement.create({data:{storeId,plan,source,externalId,expiresAt,note,status:'active'}});
     });
   }
   return basePrisma.entitlement.create({ data: { storeId, plan, source, expiresAt, note, status: 'active' } });
@@ -65,14 +68,14 @@ const recordAiUsage = async (endpoint, storeId) => {
 
 /// 今天已用的 AI 次数。bucket='core' 只数口述记账链路，'other' 数其余。
 /// 按天不按月：月额度会让用户"月初挥霍月末干瞪眼"，按天给挫败感小得多，成本上限一样。
-const CORE_ENDPOINTS = ['parse-entry', 'confirm-entry'];
+const CORE_ENDPOINTS = ['parse-entry'];
 const dailyAiCalls = async (bucket, storeId) => {
   const id = storeId ?? getTenantId();
   if (!id) return 0;
   const day = localDayKey(new Date());
   const rows = await basePrisma.aiUsage.findMany({ where: { storeId: id, day }, select: { calls: true, endpoint: true } });
   return rows
-    .filter((r) => (bucket === 'core' ? CORE_ENDPOINTS.includes(r.endpoint) : !CORE_ENDPOINTS.includes(r.endpoint)))
+    .filter((r) => r.endpoint !== 'confirm-entry' && (bucket === 'core' ? CORE_ENDPOINTS.includes(r.endpoint) : !CORE_ENDPOINTS.includes(r.endpoint)))
     .reduce((s, r) => s + r.calls, 0);
 };
 
@@ -83,9 +86,9 @@ const monthlyAiCalls = async (storeId) => {
   const prefix = localDayKey(new Date()).slice(0, 7); // YYYY-MM
   const rows = await basePrisma.aiUsage.findMany({
     where: { storeId: id, day: { startsWith: prefix } },
-    select: { calls: true },
+    select: { calls: true, endpoint: true },
   });
-  return rows.reduce((s, r) => s + r.calls, 0);
+  return rows.filter(r => r.endpoint !== 'confirm-entry').reduce((s, r) => s + r.calls, 0);
 };
 
 /// 本月有几天把额度用满了。订阅页拿它说人话："这个月有 12 天不够用"。

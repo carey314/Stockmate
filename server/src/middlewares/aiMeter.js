@@ -20,52 +20,26 @@ const { fail } = require('../utils/response');
 const { currentPlan, recordAiUsage, dailyAiCalls, PLAN_FREE } = require('../utils/entitlement');
 
 // 核心 = 口述记账链路；其余共用另一份额度
-const CORE = new Set(['parse-entry', 'confirm-entry']);
+const CORE = new Set(['parse-entry']);
 const bucketOf = (endpoint) => (CORE.has(endpoint) ? 'core' : 'other');
 
-const num = (name, fallback = 0) => Number(process.env[name]) || fallback;
-
+const {limitFor}=require('../utils/aiLimits');
+const {runAiContext}=require('../services/metricsContext');
 const aiMeter = (endpoint) => async (req, res, next) => {
-  const bucket = bucketOf(endpoint);
-  const limit = bucket === 'core' ? num('FREE_AI_DAILY_CORE') : num('FREE_AI_DAILY_OTHER');
-
-  if (limit > 0) {
-    try {
-      const { plan } = await currentPlan();
-      if (plan !== PLAN_FREE) {
-        // 付费版也要有天花板：订阅页写的是"不限次（每天 100 次防滥用上限）"，
-        // 真做成无限的话，一个被盗号或写脚本的用户就能把 AI 账单刷爆。
-        // 这个上限远高于任何真实店铺的用量，正常用户一辈子撞不到。
-        const proLimit = bucket === 'core' ? num('PRO_AI_DAILY_CORE', 100) : num('PRO_AI_DAILY_OTHER', 50);
-        const usedPro = await dailyAiCalls(bucket);
-        if (proLimit > 0 && usedPro >= proLimit) {
-          return fail(res, 429, `今天的 AI 调用已达上限（${usedPro}/${proLimit}），明天 0 点恢复。正常记账用不到这个量，如果你确实需要更多，通过帮助页联系我们。`);
-        }
-      }
-      if (plan === PLAN_FREE) {
-        const used = await dailyAiCalls(bucket);
-        if (used >= limit) {
-          const what = bucket === 'core' ? '今天的 AI 记账次数' : '今天的 AI 助手次数';
-          return fail(
-            res,
-            402,
-            `${what}用完了（${used}/${limit}），明天 0 点自动恢复。` +
-              (bucket === 'core'
-                ? '着急的话手动开单一样快：商品列表点两下就成单，记账、报表、对账都不受影响。'
-                : '这个功能有手动替代方案，不影响你正常做生意。')
-          );
-        }
-      }
-    } catch (_) {
-      /* 额度判断出错就放行：宁可少收钱，也不能让老板干不了活 */
-    }
-  }
+  if(endpoint==='confirm-entry')return next();
+  const bucket=bucketOf(endpoint);
+  try {
+    const {plan}=await currentPlan();const limit=limitFor(plan,bucket);
+    if(limit>0){const used=await dailyAiCalls(bucket);if(used>=limit){
+      return fail(res,plan===PLAN_FREE?402:429,`今天的 AI 次数已达上限（${used}/${limit}），明天 0 点恢复；手动开单、库存、报表和对账不受影响。`);
+    }}
+  } catch (_) { /* 保留原有计量故障不阻塞业务策略 */ }
 
   // 只在真正调用成功后才计数（AI 服务挂了不该算用户头上）
   res.on('finish', () => {
     if (res.statusCode >= 200 && res.statusCode < 300) recordAiUsage(endpoint);
   });
-  next();
+  runAiContext({userId:req.user?.userId,storeId:req.user?.storeId,endpoint},next);
 };
 
 module.exports = { aiMeter, bucketOf, CORE };

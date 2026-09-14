@@ -1,4 +1,4 @@
-import { Alert, App, Button, Input, Select, Steps, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Input, Select, Steps, Table, Tabs, Tag, Typography } from 'antd'
 import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
@@ -8,6 +8,7 @@ import { t } from '../lib/i18n'
 import { AiQuotaTag, handleAiQuotaError } from '../components/AiQuota'
 import { refreshEntitlement } from '../hooks/useEntitlement'
 import { T, cardStyle } from '../theme'
+import StandardImport from '../components/StandardImport'
 
 interface ProductType {
   id: number
@@ -56,7 +57,7 @@ Great Wall Red 750ml x6  case sells 288, cost 210, 8 cases
 AI turns this into draft products; nothing is saved until you confirm. Lines it cannot read are listed as-is — it never makes things up.`,
 )
 
-export default function ImportPage() {
+function AiImport() {
   const { message, modal } = App.useApp()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
@@ -317,4 +318,8 @@ export default function ImportPage() {
       )}
     </div>
   )
+}
+
+export default function ImportPage() {
+  return <Tabs defaultActiveKey="standard" items={[{key:"standard",label:"标准表格导入",children:<StandardImport/>},{key:"ai",label:"AI自由文本导入",children:<AiImport/>}]} />
 }

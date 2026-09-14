@@ -12,15 +12,22 @@ let jwksCache = { keys: null, at: 0 };
 
 const getAppleKeys = async () => {
   if (jwksCache.keys && Date.now() - jwksCache.at < 3600_000) return jwksCache.keys;
-  const resp = await fetch(APPLE_JWKS_URL);
-  if (!resp.ok) throw httpError(502, '获取 Apple 公钥失败');
-  const { keys } = await resp.json();
-  jwksCache = { keys, at: Date.now() };
-  return keys;
+  try {
+    const resp = await fetch(APPLE_JWKS_URL, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) throw new Error('Apple keys unavailable');
+    const { keys } = await resp.json();
+    if (!Array.isArray(keys) || !keys.length || keys.some(key => !key || typeof key.kid !== 'string')) {
+      throw new Error('Invalid Apple keys');
+    }
+    jwksCache = { keys, at: Date.now() };
+    return keys;
+  } catch {
+    throw httpError(502, '暂时无法验证 Apple 身份，请稍后重试');
+  }
 };
 
-/** 验证 identityToken，返回 { sub, email } */
-const verifyAppleToken = async (identityToken) => {
+/** 旧 oauth 保持兼容；敏感网页登录桥必须提供 nonceHash 与 maxAgeSeconds。 */
+const verifyAppleToken = async (identityToken, { nonceHash, maxAgeSeconds } = {}) => {
   const decoded = jwt.decode(identityToken, { complete: true });
   if (!decoded?.header?.kid) throw httpError(401, 'Apple 令牌格式无效');
 
@@ -35,6 +42,21 @@ const verifyAppleToken = async (identityToken) => {
       issuer: APPLE_ISSUER,
       audience: BUNDLE_ID,
     });
+    if (typeof payload.sub !== 'string' || !payload.sub.trim()) throw new Error('缺少用户标识');
+    if (nonceHash !== undefined || maxAgeSeconds !== undefined) {
+      const now = Math.floor(Date.now() / 1000);
+      if (typeof nonceHash !== 'string' || !/^[a-f0-9]{64}$/.test(nonceHash)
+          || !Number.isFinite(maxAgeSeconds) || maxAgeSeconds <= 0
+          || !Number.isInteger(payload.iat) || !Number.isInteger(payload.exp)
+          || now - payload.iat > maxAgeSeconds || payload.iat > now + 30
+          || typeof payload.nonce !== 'string' || !payload.nonce) {
+        throw new Error('请重新通过 Apple 验证身份');
+      }
+      const actual = crypto.createHash('sha256').update(payload.nonce).digest();
+      if (!crypto.timingSafeEqual(actual, Buffer.from(nonceHash, 'hex'))) {
+        throw new Error('Apple 验证请求不匹配');
+      }
+    }
     return { sub: payload.sub, email: payload.email ?? null };
   } catch (e) {
     throw httpError(401, `Apple 登录校验失败：${e.message}`);

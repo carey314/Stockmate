@@ -17,6 +17,8 @@ import CalendarPage from './pages/CalendarPage'
 import StatementsPage from './pages/StatementsPage'
 import ImportPage from './pages/ImportPage'
 import SettingsPage from './pages/SettingsPage'
+import ExperienceCodePage from './pages/ExperienceCodePage'
+import PlatformApp from './platform/PlatformApp'
 
 // 仅开发环境注册的崩溃页：给 ErrorBoundary 的自动化测试用（生产构建不含此路由）
 function CrashForTest(): never {
@@ -29,6 +31,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/platform/*" element={<PlatformApp />} />
       <Route
         path="/"
         element={
@@ -52,6 +55,7 @@ export default function App() {
         <Route path="statements" element={<StatementsPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="experience-code" element={<ExperienceCodePage />} />
         {import.meta.env.DEV && <Route path="__crash" element={<CrashForTest />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

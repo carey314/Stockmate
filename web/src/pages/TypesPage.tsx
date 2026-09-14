@@ -31,6 +31,8 @@ interface FieldDef {
   unit: string | null
   required: number | boolean
   affectsStock: number | boolean
+  showInList: number | boolean
+  isCore: number | boolean
   sortOrder: number
 }
 interface ProductType {
@@ -44,6 +46,11 @@ interface ProductType {
 
 // 本地草稿字段（新建/加字段用）
 interface FieldDraft {
+  id?: number
+  unit?: string | null
+  showInList?: boolean
+  isCore?: boolean
+  sortOrder?: number
   key: string
   label: string
   type: FieldDef['type']
@@ -191,6 +198,11 @@ export default function TypesPage() {
     setDesc(t.description ?? '')
     setDrafts(
       t.fields.map((f) => ({
+        id: f.id,
+        unit: f.unit,
+        showInList: !!f.showInList,
+        isCore: !!f.isCore,
+        sortOrder: f.sortOrder,
         key: f.key,
         label: f.label,
         type: f.type,
@@ -224,14 +236,18 @@ export default function TypesPage() {
   }
 
   const toPayloadField = (f: FieldDraft, i: number) => ({
+    id: f.id,
+    unit: f.unit ?? null,
+    showInList: f.showInList ?? false,
+    isCore: f.isCore ?? false,
     key: f.key,
     label: f.label.trim(),
     type: f.type,
     scope: f.scope,
-    options: f.type === 'select' ? f.options : undefined,
+    options: f.options.length ? f.options : null,
     required: f.required,
-    affectsStock: f.scope === 'sku' ? f.affectsStock : true,
-    sortOrder: i,
+    affectsStock: f.affectsStock,
+    sortOrder: f.sortOrder ?? i,
   })
 
   const submit = async () => {
@@ -246,11 +262,9 @@ export default function TypesPage() {
     setBusy(true)
     try {
       if (editing) {
-        // 编辑：改名 + 字段全量替换（先删旧字段再加新的，避免逐字段 diff）
-        await api.put(`/product-types/${editing.id}`, { name: name.trim(), description: desc.trim() || null })
-        const oldIds = editing.fields.map((f) => f.id).filter(Boolean) as number[]
-        for (const fid of oldIds) await api.delete(`/product-types/${editing.id}/fields/${fid}`).catch(() => {})
-        for (let i = 0; i < drafts.length; i++) await api.post(`/product-types/${editing.id}/fields`, toPayloadField(drafts[i], i))
+        await api.put(`/product-types/${editing.id}`, {
+          name: name.trim(), description: desc.trim() || null, fields: drafts.map(toPayloadField),
+        })
         message.success(t('已保存', 'Saved'))
       } else {
         await api.post('/product-types', {

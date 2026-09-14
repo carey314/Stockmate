@@ -15,14 +15,16 @@ import CountUp from '../components/CountUp'
 import SalesTrendChart, { type SalesPoint } from '../components/SalesTrendChart'
 import RestockCard from '../components/RestockCard'
 import { fmtMoney } from '../lib/format'
+import { profitProblem, reliableProfit } from '../lib/profitQuality'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 interface Overview {
   todaySales: number
   todayOrderCount: number
-  todayProfit: number
+  todayProfit?: number | null
   profitUnreliable: boolean
+  historyIncomplete?: boolean
   noCostSales: number
   noCostProductNames: string[]
   lowStockCount: number
@@ -191,21 +193,10 @@ export default function DashboardPage() {
             />
             {isAdmin ? (
               <StatCard
-                title={t('今日毛利', "Today's Gross Profit")}
-                value={<CountUp value={ov.todayProfit} format={fmtMoney} speedBlur />}
+                title={t('今日经营利润', "Today's Operating Profit")}
+                value={!reliableProfit(ov.todayProfit, ov) ? <Typography.Text type="secondary" style={{ fontSize: 16 }}>{t('暂无法准确计算', 'Cannot calculate accurately yet')}</Typography.Text> : <CountUp value={ov.todayProfit as number} format={fmtMoney} speedBlur />}
                 icon={<RiseOutlined />}
-                note={
-                  ov.profitUnreliable
-                    ? t(
-                        `其中 ${fmtMoney(ov.noCostSales)} 的货没填进价（${ov.noCostProductNames
-                          .slice(0, 2)
-                          .join('、')}${ov.noCostProductNames.length > 2 ? '…' : ''}）`,
-                        `${fmtMoney(ov.noCostSales)} of this has no cost price on file (${ov.noCostProductNames
-                          .slice(0, 2)
-                          .join(', ')}${ov.noCostProductNames.length > 2 ? '…' : ''})`,
-                      )
-                    : undefined
-                }
+                note={profitProblem(ov.todayProfit, ov) || t('已扣除销货成本和经营支出。', 'After cost of goods sold and operating expenses.')}
               />
             ) : (
               <StatCard

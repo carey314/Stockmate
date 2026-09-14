@@ -10,6 +10,7 @@ const routes = require('./routes');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
+require('./config/proxy').configureProxy(app);
 
 const { globalLimiter } = require('./middlewares/rateLimit');
 app.use(globalLimiter); // 全局兜底限流：客户端死循环/脚本刷接口时保住服务器

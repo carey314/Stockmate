@@ -1,7 +1,10 @@
 import { Alert, App, Button, Checkbox, Empty, Input, Select, Table, Tag, Tooltip, Typography } from 'antd'
 import { CheckCircleOutlined, QuestionCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import api from '../api/client'
+import { fetchAllPages } from '../api/pagination'
+import { sessionSnapshot, isCurrentSession } from '../lib/session'
+import { draftStorage } from '../lib/draftStorage'
 import { useAuth } from '../auth'
 import { AiQuotaTag, handleAiQuotaError } from '../components/AiQuota'
 import { refreshEntitlement } from '../hooks/useEntitlement'
@@ -9,6 +12,15 @@ import { fmtMoney, fmtQty } from '../lib/format'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
+const ACCOUNTS = ['现金', '微信', '支付宝', '银行卡']
+const money = (value: number) => Math.round(value * 100) / 100
+const amount = (quantity: number, price: number | null, total: number | null) => price == null ? total : money(quantity * price)
+interface MatchedProduct {
+  id: number
+  name: string
+  unit: string
+  skus?: { id: number; specText: string; price?: number }[]
+}
 // ===== parseEntry 返回结构 =====
 interface SaleDraft {
   name: string
@@ -18,16 +30,21 @@ interface SaleDraft {
   unitPrice: number | null
   paid: boolean | null
   suggestedSkuId: number | null
+  settlementAccount?: string
   customer: { id: number; name: string } | null
-  matchedProduct: { id: number; name: string; unit: string } | null
+  matchedProduct: MatchedProduct | null
 }
 interface PurchaseDraft {
+  suggestedSkuId?: number | null
+  supplier?: { id: number; name: string } | null
+  paidAmount?: number | null
+  settlementAccount?: string
   name: string
   quantity: number
   unit: string
   totalCost: number | null
   unitCost: number | null
-  matchedProduct: { id: number; name: string; unit: string } | null
+  matchedProduct: MatchedProduct | null
   suggestedType: { id: number; name: string } | null
 }
 interface ExpenseDraft {
@@ -49,7 +66,21 @@ interface ParseResp {
   todayContext: { ordersCount: number; ordersTotal: number; incomesTotal: number } | null
 }
 interface ConfirmResp {
-  [k: string]: unknown
+  requestId?: string
+  replayed?: boolean
+  orders?: { id: number; orderNo: string; actualAmount: number; paidAmount: number; unpaidAmount: number }[]
+  purchaseOrders?: { id: number; orderNo: string; actualAmount: number; paidAmount: number; unpaidAmount: number }[]
+  incomes?: { id: number; source: string; amount: number; note?: string | null }[]
+  expenses?: { id: number; category: string; amount: number; note?: string | null }[]
+  negativeStock?: unknown[]
+}
+
+type SaleEdits = Record<number, { on: boolean; unitPrice: number | null; paid: boolean | null; skuId: number | null; account: string }>
+type PurchaseEdits = Record<number, { on: boolean; unitCost: number | null; skuId: number | null; supplierId: number | null; paidAmount: number | null; account: string }>
+interface SavedDraft {
+  text: string; mode: string; resp: ParseResp | null; done: ConfirmResp | null
+  pending: Record<string, unknown> | null
+  saleEdit: SaleEdits; purEdit: PurchaseEdits; expOn: Record<number, boolean>; aggOn: Record<number, boolean>; buildFile: Record<string, boolean>
 }
 
 const MODES = [
@@ -77,12 +108,22 @@ AI only drafts entries — nothing is saved until you confirm. It never touches 
 
 export default function QuickEntryPage() {
   const { message, modal } = App.useApp()
-  const [text, setText] = useState('')
-  const [mode, setMode] = useState('default')
+  const { user, profile } = useAuth()
+  const [storage] = useState(() => draftStorage<SavedDraft>('quick-entry', user?.id, profile?.storeId))
+  const saved = storage.initial
+  const [storageError, setStorageError] = useState(storage.readError)
+  const [text, setText] = useState(saved?.text ?? '')
+  const [mode, setMode] = useState(saved?.mode ?? 'default')
   const [parsing, setParsing] = useState(false)
-  const [resp, setResp] = useState<ParseResp | null>(null)
+  const [resp, setResp] = useState<ParseResp | null>(saved?.resp ?? null)
   const [committing, setCommitting] = useState(false)
-  const [done, setDone] = useState<ConfirmResp | null>(null)
+  const [done, setDone] = useState<ConfirmResp | null>(saved?.done ?? null)
+  const [frozen, setFrozen] = useState(!!saved?.pending && !saved.done)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+  const pending = useRef<Record<string, unknown> | null>(saved?.pending ?? null)
+  const inFlight = useRef(false)
+  const version = useRef(0)
+  useEffect(() => () => { version.current++ }, [])
 
   // 口述文本/解析草案未确认入库时，拦误刷新误关标签（done 后草案已落库，不拦）
   useEffect(() => {
@@ -94,37 +135,56 @@ export default function QuickEntryPage() {
   }, [text, resp, done])
 
   // 可编辑草案的本地态：用索引 key 存 勾选/单价/收款/进价 覆盖
-  const [saleEdit, setSaleEdit] = useState<Record<number, { on: boolean; unitPrice: number | null; paid: boolean | null }>>({})
-  const [purEdit, setPurEdit] = useState<Record<number, { on: boolean; unitCost: number | null }>>({})
-  const [expOn, setExpOn] = useState<Record<number, boolean>>({})
-  const [aggOn, setAggOn] = useState<Record<number, boolean>>({})
+  const [saleEdit, setSaleEdit] = useState<SaleEdits>(saved?.saleEdit ?? {})
+  const [purEdit, setPurEdit] = useState<PurchaseEdits>(saved?.purEdit ?? {})
+  const [expOn, setExpOn] = useState<Record<number, boolean>>(saved?.expOn ?? {})
+  const [aggOn, setAggOn] = useState<Record<number, boolean>>(saved?.aggOn ?? {})
   // 没档案的商品「顺便建档」勾选（键 s0/p1…）——建档后销售真扣库存、进货真入库
-  const [buildFile, setBuildFile] = useState<Record<string, boolean>>({})
+  const [buildFile, setBuildFile] = useState<Record<string, boolean>>(saved?.buildFile ?? {})
 
   // 建档要归到哪个品类：主营品类优先，没有就第一个品类；一个品类都没有则禁用建档
-  const { user, profile } = useAuth()
+  const snapshot = (): SavedDraft => ({ text, mode, resp, done, pending: pending.current, saleEdit, purEdit, expOn, aggOn, buildFile })
+  useEffect(() => {
+    if (!storage.current()) return
+    setStorageError(storage.write({ text, mode, resp, done, pending: pending.current, saleEdit, purEdit, expOn, aggOn, buildFile }))
+  }, [storage, text, mode, resp, done, saleEdit, purEdit, expOn, aggOn, buildFile, frozen])
   const isAdmin = user?.role === 'admin'
   const [types, setTypes] = useState<{ id: number; name: string }[]>([])
+  const [suppliers, setSuppliers] = useState<{ id: number; name: string }[]>([])
+  const [lookupError, setLookupError] = useState<string | null>(null)
   useEffect(() => {
-    api
-      .get<{ id: number; name: string }[] | { list: { id: number; name: string }[] }>('/product-types')
-      .then((d) => setTypes(Array.isArray(d) ? d : d.list))
-      .catch(() => {})
+    let alive = true
+    Promise.all([
+      api.get<{ id: number; name: string }[] | { list: { id: number; name: string }[] }>('/product-types'),
+      fetchAllPages<{ id: number; name: string }>('/suppliers'),
+    ]).then(([categories, parties]) => {
+      if (!alive) return
+      setTypes(Array.isArray(categories) ? categories : categories.list)
+      setSuppliers(parties)
+    }).catch((e) => { if (alive) setLookupError((e as Error).message) })
+    return () => { alive = false }
   }, [])
   const createTypeId = profile?.mainTypeId ?? types[0]?.id ?? null
   const createTypeName = types.find((x) => x.id === createTypeId)?.name
 
   const parse = async () => {
+    if (!storage.current() || storage.readError || inFlight.current || frozen || parsing) return
     if (text.trim().length < 2) return message.warning(t('先写点内容', 'Type something first'))
+    const identity = sessionSnapshot()
+    const ticket = ++version.current
+    const current = () => ticket === version.current && isCurrentSession(identity)
     setParsing(true)
-    setResp(null)
-    setDone(null)
     try {
       const r = await api.post<ParseResp>('/ai/parse-entry', { text, mode })
+      if (!current()) return
+      setBuildFile({})
+      pending.current = null
+      setConfirmError(null)
+      setDone(null)
       setResp(r)
       // 默认全选，单价/收款/进价用 AI 给的初值
-      setSaleEdit(Object.fromEntries(r.sales.map((s, i) => [i, { on: true, unitPrice: s.unitPrice, paid: s.paid }])))
-      setPurEdit(Object.fromEntries(r.purchases.map((p, i) => [i, { on: true, unitCost: p.unitCost }])))
+      setSaleEdit(Object.fromEntries(r.sales.map((s, i) => [i, { on: true, unitPrice: s.unitPrice, paid: s.paid, skuId: s.suggestedSkuId ?? (s.matchedProduct?.skus?.length === 1 ? s.matchedProduct.skus[0].id : null), account: s.settlementAccount && ACCOUNTS.includes(s.settlementAccount) ? s.settlementAccount : '现金' }])))
+      setPurEdit(Object.fromEntries(r.purchases.map((p, i) => [i, { on: true, unitCost: p.unitCost, skuId: p.suggestedSkuId ?? (p.matchedProduct?.skus?.length === 1 ? p.matchedProduct.skus[0].id : null), supplierId: p.supplier?.id ?? null, paidAmount: p.settlementAccount === '挂账' ? 0 : (p.paidAmount ?? null), account: p.settlementAccount ?? '现金' }])))
       setExpOn(Object.fromEntries(r.expenses.map((_, i) => [i, true])))
       setAggOn(Object.fromEntries(r.aggregates.map((_, i) => [i, true])))
       refreshEntitlement()
@@ -134,64 +194,98 @@ export default function QuickEntryPage() {
           t('AI 没解析出可入账的内容，看看下面的提示', 'AI found nothing to record — see the notes below'),
         )
     } catch (e) {
+      if (!current()) return
       if (!handleAiQuotaError(e, modal, isAdmin)) message.error((e as Error).message)
     } finally {
-      setParsing(false)
+      if (current()) setParsing(false)
     }
   }
 
   const commit = async () => {
-    if (!resp) return
-    // 按索引组装（filter 会丢索引，先配对再过滤）；
-    // 「顺便建档」由 confirm-entry 后端处理（createProduct，与进货同构、绕过品类必填字段）
-    const salesBody = resp.sales
-      .map((s, i) => ({ s, e: saleEdit[i], i }))
-      .filter((x) => x.e?.on)
-      .map(({ s, e, i }) => ({
-        skuId: s.suggestedSkuId ?? null,
-        createProduct: !s.matchedProduct && !!buildFile[`s${i}`] && !!createTypeId,
-        productTypeId: !s.matchedProduct && buildFile[`s${i}`] ? createTypeId : null,
-        customerId: s.customer?.id ?? null,
-        paid: e.paid,
-        name: s.name,
-        quantity: s.quantity,
-        unit: s.unit || (s.matchedProduct?.unit ?? '件'),
-        totalAmount: s.totalAmount,
-        unitPrice: e.unitPrice,
-      }))
-    const purchasesBody = resp.purchases
-      .map((p, i) => ({ p, e: purEdit[i], i }))
-      .filter((x) => x.e?.on)
-      .map(({ p, e, i }) => ({
-        productId: p.matchedProduct?.id ?? null,
-        // 勾了「顺便建档」→ 后端建商品并按这单入库（confirm-entry 原生支持）
-        createProduct: !p.matchedProduct && !!buildFile[`p${i}`] && !!createTypeId,
-        productTypeId: !p.matchedProduct && buildFile[`p${i}`] ? createTypeId : null,
-        name: p.name,
-        quantity: p.quantity,
-        unit: p.unit || '件',
-        totalCost: p.totalCost,
-        unitCost: e.unitCost,
-      }))
-    const expensesBody = resp.expenses.filter((_, i) => expOn[i]).map((x) => ({ category: x.category, amount: x.amount, note: x.note }))
-    const aggregatesBody = resp.aggregates.filter((_, i) => aggOn[i]).map((x) => ({ label: x.label, amount: x.amount, note: x.note }))
-    if (salesBody.length + purchasesBody.length + expensesBody.length + aggregatesBody.length === 0)
-      return message.warning(t('没有勾选任何一条', 'Nothing is selected'))
-    setCommitting(true)
-    try {
-      const r = await api.post<ConfirmResp>('/ai/confirm-entry', {
-        purchases: purchasesBody,
-        sales: salesBody,
-        expenses: expensesBody,
-        aggregates: aggregatesBody,
+    if (!storage.current() || storage.readError || !resp || inFlight.current || done) return
+    // 未知结果只能重试完全相同的内容/ID，不能因编辑而创建另一张真实单据。
+    let body = pending.current
+    if (!body) {
+      const salesBody = resp.sales.flatMap((s, i) => {
+        const e = saleEdit[i]
+        if (!e?.on) return []
+        const paid = e.paid ?? !(s.customer && s.customer.name !== '散客')
+        return [{
+          skuId: e.skuId,
+          createProduct: !s.matchedProduct && !!buildFile[`s${i}`] && !!createTypeId,
+          productTypeId: !s.matchedProduct && buildFile[`s${i}`] ? createTypeId : null,
+          customerId: s.customer?.id ?? null,
+          paid,
+          settlementAccount: paid ? e.account : '挂账',
+          name: s.name, quantity: s.quantity, unit: s.unit || s.matchedProduct?.unit || '件',
+          totalAmount: amount(s.quantity, e.unitPrice, s.totalAmount), unitPrice: e.unitPrice,
+          matched: !!s.matchedProduct,
+        }]
       })
-      setDone(r)
+      const purchasesBody = resp.purchases.flatMap((p, i) => {
+        const e = purEdit[i]
+        if (!e?.on) return []
+        const createProduct = !p.matchedProduct && !!buildFile[`p${i}`] && !!createTypeId
+        const totalCost = amount(p.quantity, e.unitCost, p.totalCost)
+        return [{
+          productId: p.matchedProduct?.id ?? null, skuId: e.skuId,
+          createProduct, expenseOnly: !p.matchedProduct && !createProduct,
+          productTypeId: createProduct ? createTypeId : null,
+          supplierId: e.supplierId,
+          paidAmount: e.paidAmount ?? (e.account === '挂账' ? 0 : totalCost),
+          settlementAccount: e.account,
+          name: p.name, quantity: p.quantity, unit: p.unit || '件',
+          totalCost, unitCost: e.unitCost,
+        }]
+      })
+      for (const sale of salesBody) {
+        if (!sale.matched && sale.unitPrice == null && sale.totalAmount == null) return message.warning(t(`「${sale.name}」请填写真实售价`, `Enter the actual sale price for "${sale.name}"`))
+        if (sale.matched && !sale.skuId) return message.warning(t(`「${sale.name}」请选择销售规格`, `Select a variant for "${sale.name}"`))
+        if (!sale.matched && !sale.createProduct && !sale.paid) return message.warning(t(`「${sale.name}」挂账销售需先建档或匹配商品`, `Create or match a product for the credit sale "${sale.name}"`))
+        if ((sale.unitPrice != null && (!Number.isFinite(sale.unitPrice) || sale.unitPrice < 0)) || (sale.totalAmount != null && (!Number.isFinite(sale.totalAmount) || sale.totalAmount < 0))) return message.warning(t('销售金额须为有效非负数', 'Enter a valid non-negative sales amount'))
+      }
+      for (const purchase of purchasesBody) {
+        if (purchase.productId && !purchase.skuId) return message.warning(t(`「${purchase.name}」请选择进货规格`, `Select a variant for "${purchase.name}"`))
+        if (purchase.totalCost == null || !Number.isFinite(purchase.totalCost) || purchase.totalCost < 0) return message.warning(t(`「${purchase.name}」请填写真实进价`, `Enter the actual cost for "${purchase.name}"`))
+        if (purchase.paidAmount == null || !Number.isFinite(purchase.paidAmount) || purchase.paidAmount < 0 || purchase.paidAmount > purchase.totalCost) return message.warning(t('已付金额须在0到应付金额之间', 'Paid amount must be between zero and the total'))
+        if (purchase.settlementAccount === '挂账' && purchase.paidAmount !== 0) return message.warning(t('挂账不能填写付款额', 'On-credit purchases cannot include a payment'))
+        if (purchase.expenseOnly && (purchase.totalCost <= 0 || purchase.paidAmount !== purchase.totalCost)) return message.warning(t('仅记支出必须是已全额支付的花销；赊购请先建档', 'Expense-only entries must be fully paid; create a product for credit purchases'))
+        if (purchase.paidAmount < purchase.totalCost && !purchase.supplierId) return message.warning(t('有欠款时必须选择供应商', 'Select a supplier for an outstanding balance'))
+      }
+      const expenses = resp.expenses.filter((_, i) => expOn[i]).map((x) => ({ category: x.category, amount: x.amount, note: x.note }))
+      const aggregates = resp.aggregates.filter((_, i) => aggOn[i]).map((x) => ({ label: x.label, amount: x.amount, note: x.note }))
+      if (!salesBody.length && !purchasesBody.length && !expenses.length && !aggregates.length) return message.warning(t('没有勾选任何一条', 'Nothing is selected'))
+      body = { requestId: crypto.randomUUID(), purchases: purchasesBody, sales: salesBody.map(({ matched: _matched, ...row }) => row), expenses, aggregates }
+      pending.current = body
+    }
+    const saveError = storage.write({ ...snapshot(), pending: body })
+    setStorageError(saveError)
+    setFrozen(true)
+    if (saveError) return
+    const identity = sessionSnapshot()
+    const ticket = ++version.current
+    const current = () => ticket === version.current && isCurrentSession(identity)
+    inFlight.current = true
+    setCommitting(true)
+    setFrozen(true)
+    setConfirmError(null)
+    try {
+      const result = await api.post<ConfirmResp>('/ai/confirm-entry', body)
+      if (!current()) return
+      setStorageError(storage.write({ ...snapshot(), done: result, pending: body }))
+      setDone(result)
+      pending.current = body
+      setFrozen(false)
       refreshEntitlement()
       message.success(t('已入账', 'Recorded'))
     } catch (e) {
+      if (!current()) return
+      setConfirmError((e as Error).message)
+      // 400校验失败、404对象不存在均已整批回滚；网络/5xx/409不能当成未入账。
+      if ([400, 404].includes((e as { status?: number }).status ?? 0)) { pending.current = null; setFrozen(false) }
       if (!handleAiQuotaError(e, modal, isAdmin)) message.error((e as Error).message)
     } finally {
-      setCommitting(false)
+      if (current()) { inFlight.current = false; setCommitting(false) }
     }
   }
 
@@ -204,8 +298,8 @@ export default function QuickEntryPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 960 }}>
       <div style={{ ...cardStyle, padding: 20 }}>
         <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Select value={mode} onChange={setMode} options={MODES} style={{ width: 280 }} />
-          <Button type="primary" icon={<ThunderboltOutlined />} loading={parsing} onClick={parse}>
+          <Select disabled={!!done || frozen || parsing} value={mode} onChange={setMode} options={MODES} style={{ width: 280 }} />
+          <Button type="primary" icon={<ThunderboltOutlined />} loading={parsing} disabled={!!done || frozen || parsing} onClick={parse}>
             {parsing ? t('AI 解析中…', 'AI parsing…') : t('AI 解析', 'AI parse')}
           </Button>
           <AiQuotaTag bucket="core" />
@@ -216,11 +310,16 @@ export default function QuickEntryPage() {
             )}
           </Typography.Text>
         </div>
-        <Input.TextArea value={text} onChange={(e) => setText(e.target.value)} placeholder={PLACEHOLDER} autoSize={{ minRows: 5, maxRows: 12 }} style={{ fontSize: 14 }} />
+        <Input.TextArea disabled={!!done || frozen || parsing} value={text} onChange={(e) => setText(e.target.value)} placeholder={PLACEHOLDER} autoSize={{ minRows: 5, maxRows: 12 }} style={{ fontSize: 14 }} />
       </div>
 
+      {storageError && <Alert type="error" showIcon message={storageError} />}
+      {saved && (saved.text || saved.resp) && !done && <Alert type="info" message={t('已恢复本账号草稿；待确认的记录会使用原编号重试。', 'Your draft was restored. Pending entries retry with their original ID.')} />}
+      {lookupError && <Alert type="error" showIcon message={lookupError} />}
       {resp && !done && (
         <div style={{ ...cardStyle, padding: 20 }}>
+          {confirmError && <Alert type="warning" showIcon message={confirmError} description={frozen ? t('确认结果尚不明确，草案已锁定。请重试同一笔确认，不要另建重复单。', 'The confirmation result is uncertain. This draft is locked; retry this same entry to avoid duplicates.') : t('本次未入账，请修正草案后确认。', 'Nothing was recorded. Correct the draft and confirm again.')} />}
+          <fieldset disabled={frozen} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           {resp.warnings.length > 0 && (
             <Alert
               style={{ marginBottom: 14 }}
@@ -237,12 +336,13 @@ export default function QuickEntryPage() {
                 rowKey={(_, i) => `s${i}`}
                 size="small"
                 pagination={false}
+                scroll={{ x: 1100 }}
                 dataSource={resp.sales}
                 columns={[
                   {
                     title: t('入账', 'Record'),
                     width: 50,
-                    render: (_, __, i) => <Checkbox checked={saleEdit[i]?.on} onChange={(e) => setSaleEdit((p) => ({ ...p, [i]: { ...p[i], on: e.target.checked } }))} />,
+                    render: (_, __, i) => <Checkbox disabled={frozen} checked={saleEdit[i]?.on} onChange={(e) => setSaleEdit((p) => ({ ...p, [i]: { ...p[i], on: e.target.checked } }))} />,
                   },
                   {
                     title: t('商品', 'Product'),
@@ -254,11 +354,11 @@ export default function QuickEntryPage() {
                         ) : (
                           <>
                             <Tag color="orange" style={{ marginLeft: 6 }}>
-                              {t('没档案·只记收入', 'No product record · income only')}
+                              {buildFile[`s${i}`] ? t('新建商品并扣库存', 'Create product and deduct stock') : t('没档案·仅已收款可记收入', 'No product record · paid income only')}
                             </Tag>
                             <Checkbox
                               checked={!!buildFile[`s${i}`]}
-                              disabled={!createTypeId}
+                              disabled={frozen || !createTypeId}
                               onChange={(e) => setBuildFile((p) => ({ ...p, [`s${i}`]: e.target.checked }))}
                               style={{ marginLeft: 4, fontSize: 12 }}
                             >
@@ -276,6 +376,7 @@ export default function QuickEntryPage() {
                       </span>
                     ),
                   },
+                  { title: t('规格', 'Variant'), render: (_, row, i) => row.matchedProduct?.skus?.length ? <Select disabled={frozen} value={saleEdit[i]?.skuId} placeholder={t('选择规格', 'Select variant')} options={row.matchedProduct.skus.map((sku) => ({ value: sku.id, label: sku.specText || t('默认规格', 'Default variant') }))} onChange={(skuId) => setSaleEdit((prev) => ({ ...prev, [i]: { ...prev[i], skuId } }))} style={{ minWidth: 100 }} /> : '-' },
                   { title: t('客户', 'Customer'), width: 90, render: (_, s) => s.customer?.name ?? t('散客', 'Walk-in') },
                   {
                     title: t('单价', 'Unit price'),
@@ -283,6 +384,7 @@ export default function QuickEntryPage() {
                     render: (_, __, i) => (
                       <Input
                         size="small"
+                        disabled={frozen}
                         prefix="¥"
                         value={saleEdit[i]?.unitPrice ?? ''}
                         placeholder={t('按标价', 'List price')}
@@ -291,6 +393,8 @@ export default function QuickEntryPage() {
                       />
                     ),
                   },
+                  { title: t('金额', 'Amount'), render: (_, row, i) => { const value = amount(row.quantity, saleEdit[i]?.unitPrice ?? null, row.totalAmount); return value == null ? '-' : fmtMoney(value) } },
+                  { title: t('收款账户', 'Account'), render: (_, row, i) => { const paid = saleEdit[i]?.paid ?? !(row.customer && row.customer.name !== '散客'); return <Select disabled={frozen || !paid} value={paid ? saleEdit[i]?.account : '挂账'} options={(paid ? ACCOUNTS : ['挂账']).map((value) => ({ value, label: value }))} onChange={(account) => setSaleEdit((prev) => ({ ...prev, [i]: { ...prev[i], account } }))} style={{ minWidth: 90 }} /> } },
                   {
                     // 列头解释规则，选项里只说结果——"没提"这种系统视角的词用户看不懂
                     title: (
@@ -310,6 +414,7 @@ export default function QuickEntryPage() {
                     render: (_, s, i) => (
                       <Select
                         size="small"
+                        disabled={frozen}
                         value={saleEdit[i]?.paid === true ? 'paid' : saleEdit[i]?.paid === false ? 'credit' : 'unknown'}
                         onChange={(v) => setSaleEdit((p) => ({ ...p, [i]: { ...p[i], paid: v === 'paid' ? true : v === 'credit' ? false : null } }))}
                         options={[
@@ -339,9 +444,10 @@ export default function QuickEntryPage() {
                 rowKey={(_, i) => `p${i}`}
                 size="small"
                 pagination={false}
+                scroll={{ x: 1100 }}
                 dataSource={resp.purchases}
                 columns={[
-                  { title: t('入账', 'Record'), width: 50, render: (_, __, i) => <Checkbox checked={purEdit[i]?.on} onChange={(e) => setPurEdit((p) => ({ ...p, [i]: { ...p[i], on: e.target.checked } }))} /> },
+                  { title: t('入账', 'Record'), width: 50, render: (_, __, i) => <Checkbox disabled={frozen} checked={purEdit[i]?.on} onChange={(e) => setPurEdit((p) => ({ ...p, [i]: { ...p[i], on: e.target.checked } }))} /> },
                   {
                     title: t('商品', 'Product'),
                     render: (_, p, i) => (
@@ -352,11 +458,11 @@ export default function QuickEntryPage() {
                         ) : (
                           <>
                             <Tag color="orange" style={{ marginLeft: 6 }}>
-                              {t('没档案·只记花销', 'No product record · expense only')}
+                              {buildFile[`p${i}`] ? t('新建商品并入库', 'Create product and receive stock') : t('没档案·仅记已付支出，不入库存', 'No product record · paid expense only, no stock')}
                             </Tag>
                             <Checkbox
                               checked={!!buildFile[`p${i}`]}
-                              disabled={!createTypeId}
+                              disabled={frozen || !createTypeId}
                               onChange={(e) => setBuildFile((prev) => ({ ...prev, [`p${i}`]: e.target.checked }))}
                               style={{ marginLeft: 4 }}
                             >
@@ -374,12 +480,17 @@ export default function QuickEntryPage() {
                       </span>
                     ),
                   },
+                  { title: t('规格', 'Variant'), render: (_, row, i) => row.matchedProduct ? <Select disabled={frozen} value={purEdit[i]?.skuId} placeholder={t('选择规格', 'Select variant')} options={(row.matchedProduct.skus ?? []).map((sku) => ({ value: sku.id, label: sku.specText || t('默认规格', 'Default variant') }))} onChange={(skuId) => setPurEdit((prev) => ({ ...prev, [i]: { ...prev[i], skuId } }))} style={{ minWidth: 100 }} /> : '-' },
+                  { title: t('供应商', 'Supplier'), render: (_, __, i) => <Select disabled={frozen} allowClear showSearch optionFilterProp="label" value={purEdit[i]?.supplierId} placeholder={t('有欠款必选', 'Required for credit')} options={suppliers.map((party) => ({ value: party.id, label: party.name }))} onChange={(supplierId) => setPurEdit((prev) => ({ ...prev, [i]: { ...prev[i], supplierId: supplierId ?? null } }))} style={{ minWidth: 120 }} /> },
+                  { title: t('付款账户', 'Account'), render: (_, __, i) => <Select disabled={frozen} value={purEdit[i]?.account} options={[...ACCOUNTS, '挂账'].map((value) => ({ value, label: value }))} onChange={(account) => setPurEdit((prev) => ({ ...prev, [i]: { ...prev[i], account, paidAmount: account === '挂账' ? 0 : null } }))} style={{ minWidth: 90 }} /> },
+                  { title: t('已付', 'Paid'), render: (_, row, i) => <Input disabled={frozen || purEdit[i]?.account === '挂账'} value={purEdit[i]?.paidAmount ?? ''} placeholder={String(amount(row.quantity, purEdit[i]?.unitCost ?? null, row.totalCost) ?? '')} onChange={(e) => setPurEdit((prev) => ({ ...prev, [i]: { ...prev[i], paidAmount: e.target.value.trim() === '' ? null : Number(e.target.value) } }))} style={{ width: 80 }} /> },
                   {
                     title: t('进价', 'Cost price'),
                     width: 110,
                     render: (_, __, i) => (
                       <Input
                         size="small"
+                        disabled={frozen}
                         prefix="¥"
                         value={purEdit[i]?.unitCost ?? ''}
                         placeholder={t('单价', 'Unit price')}
@@ -388,7 +499,7 @@ export default function QuickEntryPage() {
                       />
                     ),
                   },
-                  { title: t('总花费', 'Total cost'), width: 90, render: (_, p) => (p.totalCost != null ? fmtMoney(p.totalCost) : '-') },
+                  { title: t('总花费', 'Total cost'), width: 90, render: (_, p, i) => { const value = amount(p.quantity, purEdit[i]?.unitCost ?? null, p.totalCost); return value == null ? '-' : fmtMoney(value) } },
                 ]}
               />
             </Section>
@@ -398,7 +509,7 @@ export default function QuickEntryPage() {
             <Section title={t(`支出 ${resp.expenses.length} 笔`, `Expenses · ${resp.expenses.length}`)}>
               {resp.expenses.map((x, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, fontSize: 13 }}>
-                  <Checkbox checked={expOn[i]} onChange={(e) => setExpOn((p) => ({ ...p, [i]: e.target.checked }))} />
+                  <Checkbox disabled={frozen} checked={expOn[i]} onChange={(e) => setExpOn((p) => ({ ...p, [i]: e.target.checked }))} />
                   <Tag>{x.category}</Tag>
                   <b>{fmtMoney(x.amount)}</b>
                   {x.note && <span style={{ color: T.secondary }}>{x.note}</span>}
@@ -422,7 +533,7 @@ export default function QuickEntryPage() {
               )}
               {resp.aggregates.map((x, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, fontSize: 13 }}>
-                  <Checkbox checked={aggOn[i]} onChange={(e) => setAggOn((p) => ({ ...p, [i]: e.target.checked }))} />
+                  <Checkbox disabled={frozen} checked={aggOn[i]} onChange={(e) => setAggOn((p) => ({ ...p, [i]: e.target.checked }))} />
                   <span>{x.label}</span>
                   <b>{fmtMoney(x.amount)}</b>
                   {x.note && <span style={{ color: T.secondary }}>{x.note}</span>}
@@ -435,8 +546,9 @@ export default function QuickEntryPage() {
             <Empty description={t('没解析出可入账的内容', 'Nothing to record was parsed')} />
           )}
 
+          </fieldset>
           {totalItems > 0 && (
-            <Button type="primary" icon={<CheckCircleOutlined />} loading={committing} onClick={commit} style={{ marginTop: 10 }}>
+            <Button type="primary" icon={<CheckCircleOutlined />} loading={committing} disabled={committing} onClick={commit} style={{ marginTop: 10 }}>
               {t('确认入账勾选的项', 'Record the selected items')}
             </Button>
           )}
@@ -450,11 +562,17 @@ export default function QuickEntryPage() {
           </Typography.Text>
           <Typography.Paragraph type="secondary" style={{ fontSize: 12.5, margin: '6px 0 0' }}>
             {t(
-              '销售落成订单、进货落成进货单/花销、支出和营业额进流水。去对应页面可查。',
-              'Sales became orders, purchases became purchase orders or expenses, and expenses and revenue totals went into the ledger. Check the matching pages to review them.',
+              '已匹配或新建商品的销售生成订单、采购生成进货单；仅记收入/支出及营业额进入流水。去对应页面可查。',
+              'Matched or newly created products generated sales or purchase orders; income-only, expense-only and revenue entries went into the ledger. Review them on the corresponding pages.',
             )}
           </Typography.Paragraph>
-          <Button style={{ marginTop: 12 }} onClick={() => { setResp(null); setDone(null); setText('') }}>
+          {done.replayed && <Typography.Paragraph>{t('这笔之前已入账，本次返回原结果，没有重复记账。', 'This entry was already recorded. The original result was returned without recording it again.')}</Typography.Paragraph>}
+          {done.orders?.map((order) => <div key={`sale${order.id}`} style={{ marginTop: 8 }}>{t('销售单 ', 'Sale ')}{order.orderNo} · {fmtMoney(order.actualAmount)} · {t('待收 ', 'Due ')}{fmtMoney(order.unpaidAmount)}</div>)}
+          {done.purchaseOrders?.map((order) => <div key={`purchase${order.id}`} style={{ marginTop: 8 }}>{t('进货单 ', 'Purchase ')}{order.orderNo} · {fmtMoney(order.actualAmount)} · {t('待付 ', 'Payable ')}{fmtMoney(order.unpaidAmount)}</div>)}
+          {done.incomes?.map((entry) => <div key={`income${entry.id}`} style={{ marginTop: 8 }}>{t('收入 ', 'Income ')}#{entry.id} · {entry.source} · {fmtMoney(entry.amount)}</div>)}
+          {done.expenses?.map((entry) => <div key={`expense${entry.id}`} style={{ marginTop: 8 }}>{t('支出 ', 'Expense ')}#{entry.id} · {entry.note || entry.category} · {fmtMoney(entry.amount)}</div>)}
+          {!!done.negativeStock?.length && <Alert type="warning" showIcon message={t('部分商品已出现负库存，请到商品页核对并补录库存。', 'Some products now have negative stock. Review and update their inventory on the Products page.')} />}
+          <Button style={{ marginTop: 12 }} onClick={() => { const error = storage.write({ ...snapshot(), text: '', resp: null, done: null, pending: null, buildFile: {} }); setStorageError(error); if (error) return; setResp(null); setDone(null); setText(''); setBuildFile({}); setConfirmError(null); pending.current = null; setFrozen(false) }}>
             {t('再记一笔', 'Record another')}
           </Button>
         </div>

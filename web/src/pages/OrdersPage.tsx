@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
+import ManualSaleModal from '../components/ManualSaleModal'
 import { fmtMoney, fmtQty, fmtTime } from '../lib/format'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
@@ -67,6 +68,7 @@ type Filter = 'all' | 'unpaid' | 'cancelled'
 
 export default function OrdersPage() {
   const { message } = App.useApp()
+  const [manualOpen, setManualOpen] = useState(false)
   // 筛选进 URL（?status=unpaid&from=&to=）：刷新/分享"有欠款的单"这类视图不丢
   const [urlParams, setUrlParams] = useSearchParams()
   const [filter, setFilter] = useState<Filter>(() => {
@@ -297,12 +299,9 @@ export default function OrdersPage() {
           }}
           style={{ width: 210 }}
         />
-        <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 'auto' }}>
-          {t(
-            '开单在手机 App 更顺手（扫码/语音）；这里管理已开的单：收欠款、退货、作废',
-            'Creating orders is easier in the mobile app (scan / voice); here you manage existing orders: collect payment, returns, void',
-          )}
-        </Typography.Text>
+        <Button type="primary" onClick={() => setManualOpen(true)} style={{ marginLeft: 'auto' }}>
+          {t('手工开单', 'Create sale')}
+        </Button>
       </div>
 
       <div style={{ ...cardStyle, padding: '8px 16px 16px', overflow: 'hidden' }}>
@@ -328,6 +327,8 @@ export default function OrdersPage() {
           scroll={{ x: 720 }}
         />
       </div>
+
+      {manualOpen && <ManualSaleModal open onClose={() => setManualOpen(false)} onCreated={(id) => { setManualOpen(false); refreshAll(id) }} />}
 
       {/* 详情抽屉 */}
       <Drawer

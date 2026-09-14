@@ -23,7 +23,7 @@ const base = new PrismaClient();
 const TENANT_MODELS = new Set([
   'User', 'ProductType', 'FieldDefinition', 'Product', 'Sku', 'Inventory', 'InventoryRecord',
   'Customer', 'Supplier', 'PricingRule', 'Order', 'OrderItem', 'PurchaseOrder', 'PurchaseOrderItem',
-  'Stocktake', 'StocktakeItem', 'Setting', 'PaymentRecord', 'Income', 'Expense', 'Recipe',
+  'Stocktake', 'StocktakeItem', 'Setting', 'PaymentRecord', 'Income', 'Expense', 'Recipe', 'TradeEvent', 'EntryConfirmation',
 ]);
 
 const READ_WHERE_OPS = new Set(['findMany', 'findFirst', 'findFirstOrThrow', 'count', 'aggregate', 'groupBy']);

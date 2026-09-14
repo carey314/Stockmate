@@ -7,6 +7,7 @@ import {
   CalendarOutlined,
   FileTextOutlined,
   HomeOutlined,
+  GiftOutlined,
   BellOutlined,
   ImportOutlined,
   InboxOutlined,
@@ -49,6 +50,7 @@ export const NAV: NavItem[] = [
   { key: '/statements', icon: <FileTextOutlined />, label: t('对账单', 'Statements') },
   { key: '/import', icon: <ImportOutlined />, label: t('批量导入', 'Import') },
   { key: '/settings', icon: <SettingOutlined />, label: t('设置', 'Settings') },
+  { key: '/experience-code', icon: <GiftOutlined />, label: t('兑换体验码', 'Experience Code'), adminOnly: true },
 ]
 
 // 原型规格：项自身 borderLeft 4px（未激活 transparent 占位防横跳）+ 32px 药丸 + 激活 8% 靛蓝底
@@ -70,6 +72,7 @@ function NavLink({ item, active, onClick }: { item: NavItem; active: boolean; on
         color: active || hover ? T.primary : T.secondary,
         fontWeight: active ? 700 : 600,
         fontSize: 13,
+        flexShrink: 0,
         letterSpacing: '0.02em',
         background: active ? primaryRgba(0.1) : hover ? T.surfaceContainerLow : 'transparent',
         transition: 'background .2s, color .2s',
@@ -107,9 +110,9 @@ export default function SideNav({
         flexDirection: 'column',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 8px', marginBottom: 40 }}>
-        {/* 图标源文件 ~/Downloads/browser/mate.png，更新时 sips -Z 256 重出 src/assets/logo.png */}
-        <img src={logoImg} alt="智存" style={{ width: 42, height: 42, flexShrink: 0 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 8px', marginBottom: 40, flexShrink: 0 }}>
+        {/* B1 原图保存在 web/design/brand/b1-20260913/，与 App 使用同一母版。 */}
+        <img src={logoImg} alt="智存" style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 10 }} />
         <div>
           <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: '-0.01em', color: T.primary }}>
             {t('智存后台', 'StockMate Admin')}
@@ -119,12 +122,12 @@ export default function SideNav({
           </Typography.Text>
         </div>
       </div>
-      <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.map((n) => (
           <NavLink key={n.key} item={n} active={selected === n.key} onClick={() => onNavigate(n.key)} />
         ))}
       </nav>
-      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
         <div
           onClick={() => window.open('https://qxju.shop/stockmate/support', '_blank')}
           onMouseEnter={() => setHelpHover(true)}

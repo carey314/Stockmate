@@ -10,17 +10,21 @@ import { T } from '../theme'
 
 // ===== 额度小标签（用在 4 个 AI 页面；轻量，不做横幅）=====
 export function AiQuotaTag({ bucket }: { bucket: 'core' | 'other' }) {
-  const { ent } = useEntitlement()
+  const { ent, updated } = useEntitlement()
   if (!ent) return null // 拿不到就不显示（铁律：不编数字）
   const used = bucket === 'core' ? ent.today.coreUsed : ent.today.otherUsed
   const limit = bucket === 'core' ? ent.today.coreLimit : ent.today.otherLimit
-  // null = 不限次。别当 0 算，会给付费用户误报"额度用完"
+  const cap = bucket === 'core' ? ent.today.coreAntiAbuseLimit : ent.today.otherAntiAbuseLimit
+  const reset = ent.today.resetAt
+    ? t(`重置时间：${ent.today.resetAt}（${ent.today.timeZone ?? ''}）`, `Resets: ${ent.today.resetAt} (${ent.today.timeZone ?? ''})`)
+    : ''
+  const changed = updated ? t(' · 权益已更新', ' · Subscription updated') : ''
   if (ent.plan !== 'free') {
+    const effectiveLimit = cap ?? limit
     return (
-      // 与 App 订阅页口径一致：不限次但有每天 100 次防滥用上限，打满时这里不许自相矛盾
-      <Tooltip title={t('不限次（每天 100 次防滥用上限，正常记账用不到这个量）', 'Unlimited (100/day anti-abuse cap — normal use never hits it)')}>
-        <Tag icon={<CrownOutlined />} color="gold" style={{ borderRadius: 999 }}>
-          {t('专业版 · 不限次', 'Pro · Unlimited')}
+      <Tooltip title={`${effectiveLimit == null ? t('不限次', 'Unlimited') : t(`防滥用上限 ${effectiveLimit} 次/天，今天已用 ${used} 次`, `Anti-abuse cap ${effectiveLimit}/day; used ${used} today`)}${reset ? ` · ${reset}` : ''}`}>
+        <Tag icon={<CrownOutlined />} color={effectiveLimit != null && used >= effectiveLimit ? 'red' : 'gold'} style={{ borderRadius: 999 }}>
+          {effectiveLimit != null && used >= effectiveLimit ? t('专业版 · 今天的额度用完了', 'Pro · Daily quota used up') : t('专业版 · 不限次', 'Pro · Unlimited')}{changed}
         </Tag>
       </Tooltip>
     )
@@ -29,9 +33,11 @@ export function AiQuotaTag({ bucket }: { bucket: 'core' | 'other' }) {
   if (limit === null) return null
   const left = Math.max(0, limit - used)
   return (
+    <Tooltip title={reset}>
     <Tag color={left <= 0 ? 'red' : left <= 2 ? 'orange' : 'default'} style={{ borderRadius: 999 }}>
-      {left <= 0 ? t('今天的额度用完了', 'Daily quota used up') : t(`今天还能用 ${left} 次`, `${left} left today`)}
+      {left <= 0 ? t('今天的额度用完了', 'Daily quota used up') : t(`今天还能用 ${left} 次`, `${left} left today`)}{changed}
     </Tag>
+    </Tooltip>
   )
 }
 
@@ -78,7 +84,8 @@ export function handleAiQuotaError(e: unknown, modal: useAppProps['modal'], isAd
               </a>
             ) : (
               <div style={{ color: T.onSurfaceVariant }}>
-                {t('在 iPhone 的 App Store 里搜「智存」下载，登录同一个账号即可开通。', 'Search “StockMate 智存” on the iPhone App Store and sign in with the same account to subscribe.')}
+                {t('已有智存 App 的店主可在原账号查看专业版。暂未提供公开下载链接，', 'Owners with the app can check Pro in their existing account. No public download link is listed yet; ')}
+                <a href="https://qxju.shop/stockmate/support" target="_blank" rel="noreferrer">{t('联系支持', 'contact support')}</a>
               </div>
             )}
             <div style={{ color: T.secondary, fontSize: 12 }}>{FREE_PROMISE()}</div>

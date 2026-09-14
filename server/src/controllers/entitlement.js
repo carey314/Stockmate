@@ -2,12 +2,7 @@ const { z } = require('zod');
 const { ok, fail } = require('../utils/response');
 const { verifyAppleReceipt } = require('../utils/appleReceipt');
 
-// 商品 ID → 权益档位。加新商品必须同步这里，否则买了也不发权益。
-const PRODUCT_TO_PLAN = {
-  'com.carey.stockmate.pro.monthly': 'pro',
-  'com.carey.stockmate.pro.yearly': 'pro',
-};
-const { currentPlan, monthlyAiCalls, dailyAiCalls, daysHitLimit, grantEntitlement, revokeEntitlement } = require('../utils/entitlement');
+const { currentPlan, monthlyAiCalls, dailyAiCalls, daysHitLimit } = require('../utils/entitlement');
 
 // App 读自己的权益状态。故意把「额度」和「渠道」都返回：
 // 渠道字段让 App 知道这份权益是哪买的（用于展示"已通过 xx 订阅"），
@@ -22,6 +17,7 @@ exports.mine = async (req, res) => {
     daysHitLimit(coreLimitRaw),
   ]);
   const free = plan === 'free';
+  const {limitFor,resetInfo}=require('../utils/aiLimits');
   const lim = (n) => (free && n > 0 ? n : null); // null = 不限
   return ok(res, {
     plan,
@@ -33,9 +29,12 @@ exports.mine = async (req, res) => {
     // 按天给额度：App 可以在口述页显示"今天还能用 N 次"，不让用户蒙在鼓里撞墙
     today: {
       coreUsed: core,
-      coreLimit: lim(Number(process.env.FREE_AI_DAILY_CORE) || 0),
+      coreLimit: lim(limitFor('free','core')),
       otherUsed: other,
-      otherLimit: lim(Number(process.env.FREE_AI_DAILY_OTHER) || 0),
+      otherLimit: lim(limitFor('free','other')),
+      coreAntiAbuseLimit: free?null:(limitFor(plan,'core')||null),
+      otherAntiAbuseLimit: free?null:(limitFor(plan,'other')||null),
+      ...resetInfo(),
     },
   });
 };
@@ -48,25 +47,21 @@ exports.mine = async (req, res) => {
 // 幂等靠 originalTransactionId：这个 id 在整条续期链上不变，
 // 每月续期都 upsert 到同一行，不会攒出一堆重复权益。
 exports.redeemApple = async (req, res) => {
-  const { receipt } = z.object({ receipt: z.string().min(20, '收据为空') }).parse(req.body);
-  const r = await verifyAppleReceipt(receipt);
-  if (!r) return fail(res, 400, '这份收据里没有订阅记录');
-  if (!r.isActive) {
-    // 过期收据不发权益，但要把状态落下来（用户可能是想恢复购买但订阅确实已过期）
-    await revokeEntitlement({ source: 'apple', externalId: r.originalTransactionId, status: 'expired' });
-    return fail(res, 400, `订阅已于 ${r.expiresAt.toISOString().slice(0, 10)} 过期`);
-  }
+  const { receipt, transactionId, productId } = z.object({ receipt:z.string().min(20,'收据为空'), transactionId:z.string().min(1).optional(), productId:z.string().min(1).optional() }).parse(req.body);
+  if(Boolean(transactionId)!==Boolean(productId))return fail(res,400,'请同时提供本次交易ID和商品ID');
+  const verified=await verifyAppleReceipt(receipt,{transactionId,productId});
+  if(!verified)return fail(res,400,'这份收据里没有支持的订阅记录');
+  const {row,ownership}=await require('../services/appleEntitlement').bindApple(req.user.storeId,verified);
+  await require('../services/metricsContext').recordVerifiedPurchase(req.user.userId,req.user.storeId,{...verified,status:row.status,revokedAt:row.appleRevokedAt});
+  const effective=await currentPlan(req.user.storeId);
+  const status=row.status==='active'&&row.expiresAt&&row.expiresAt<=new Date()?'expired':row.status;
+  return ok(res,{...effective,transaction:{verified:true,storeId:row.storeId,originalTransactionId:row.externalId,transactionId:verified.transactionId,latestTransactionId:row.appleTransactionId,productId:verified.productId,environment:row.appleEnvironment,status,expiresAt:row.expiresAt,ownership}},status==='active'?'本次交易已验证并生效':'本次交易已验证，但当前已失效');
+};
 
-  const plan = PRODUCT_TO_PLAN[r.productId];
-  if (!plan) return fail(res, 400, `未知的订阅商品 ${r.productId}`);
-
-  await grantEntitlement({
-    storeId: req.user.storeId,
-    plan,
-    source: 'apple',
-    externalId: r.originalTransactionId,
-    expiresAt: r.expiresAt,
-    note: `${r.productId} · ${r.environment}`,
-  });
-  return ok(res, { plan, expiresAt: r.expiresAt }, '订阅已生效');
+exports.appleNotification = async (req,res) => {
+ const {signedPayload}=z.object({signedPayload:z.string().min(20).max(200000)}).parse(req.body);
+ const event=await require('../utils/appleNotifications').verifyAppleNotification(signedPayload);
+ const processed=await require('../services/appleNotifications').processAppleNotification(event);
+ await require('../services/metricsContext').observeVerifiedNotification(event);
+ return ok(res,processed);
 };

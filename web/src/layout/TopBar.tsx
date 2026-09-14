@@ -52,7 +52,7 @@ export default function TopBar({
         a.download = `${prefix}.json`
         a.click()
         setTimeout(() => URL.revokeObjectURL(url), 10_000) // 立即 revoke 会取消未启动的下载
-        message.success(t('已导出全部数据（JSON）', 'All data exported (JSON)'))
+        message.success(t('已导出业务数据（JSON）', 'Business data exported (JSON)'))
       } else {
         const n = await downloadCsvBundle(data, prefix)
         message.success(t(`已导出 ${n} 张 CSV 表（浏览器若提示多文件下载请允许）`, `${n} CSV files exported (allow multiple downloads if prompted)`))
@@ -198,10 +198,10 @@ export default function TopBar({
               setExportOpen(false)
             }}
           >
-            {t('JSON 全量备份', 'JSON full backup')}
+            {t('JSON 业务数据导出', 'JSON business data export')}
           </Button>
           <div style={{ fontSize: 12, color: T.secondary }}>
-            {t('CSV 会按表逐个下载多个文件，浏览器若提示请允许。数据永远是你的，导出永久免费。', 'CSV downloads one file per table — allow multiple downloads if prompted. Your data is always yours; export is free forever.')}
+            {t('CSV 会按表逐个下载多个文件，浏览器若提示请允许。JSON 含业务数据和导出清单，目前不支持一键恢复；图片仅含链接。导出永久免费。', 'CSV downloads one file per table. JSON includes business data and a manifest; one-click restore is not supported, and images are links only. Export is always free.')}
           </div>
         </div>
       </Modal>

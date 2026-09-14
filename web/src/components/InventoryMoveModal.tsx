@@ -2,6 +2,7 @@ import { App, Button, Input, InputNumber, Modal, Segmented, Select } from 'antd'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import api from '../api/client'
+import { fetchAllPages } from '../api/pagination'
 import { t } from '../lib/i18n'
 import { T } from '../theme'
 
@@ -47,14 +48,13 @@ export default function InventoryMoveModal({
     setNote('')
     setLines([{ key: ++lineKey, skuId: null, quantity: null }])
     if (skuOpts.length === 0) {
-      api
-        .get<{ list: { name: string; skus: { id: number; specText: string }[] }[] }>('/products', { pageSize: 500 })
+      fetchAllPages<{ name: string; skus: { id: number; specText: string }[] }>('/products')
         .then((d) => {
           const opts: SkuOpt[] = []
-          for (const p of d.list) for (const s of p.skus) opts.push({ skuId: s.id, label: `${p.name}${s.specText ? ` ${s.specText}` : ''}` })
+          for (const p of d) for (const s of p.skus) opts.push({ skuId: s.id, label: `${p.name}${s.specText ? ` ${s.specText}` : ''}` })
           setSkuOpts(opts)
         })
-        .catch(() => {})
+        .catch((e) => message.error((e as Error).message))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])

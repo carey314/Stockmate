@@ -3,6 +3,7 @@ const prisma = require('../config/prisma');
 const { ok } = require('../utils/response');
 const { httpError, parseJson, localDayKey } = require('../utils/biz');
 const { sanitizeFields, sanitizeProducts, sanitizeAnswer } = require('../utils/aiGuard');
+const { projectTrades, costSummary, orderCount } = require('../services/tradeProjection');
 
 // ============ AI 提示词预设（品类字段 / 商品生成） ============
 
@@ -89,12 +90,11 @@ const ASK_SYSTEM_PROMPT = `你是店主的生意助手。下面给你这家店�
 // minQuantity 默认 0，绝大多数老板没设过——拿它判断"要不要补货"等于永远不提醒。
 const buildRestockSuggestions = async () => {
   const since = new Date(Date.now() - 14 * 24 * 3600 * 1000);
-  const items = await prisma.orderItem.findMany({
-    where: { order: { status: 'completed', createdAt: { gte: since } }, skuId: { not: null } },
-    select: { skuId: true, quantity: true },
-  });
+  const { rows } = await projectTrades('sale', since, new Date());
   const soldBySku = {};
-  for (const it of items) soldBySku[it.skuId] = (soldBySku[it.skuId] ?? 0) + it.quantity;
+  for (const row of rows) {
+    if (row.skuId != null) soldBySku[row.skuId] = (soldBySku[row.skuId] ?? 0) + row.quantity;
+  }
   const out = [];
   for (const [skuId, sold] of Object.entries(soldBySku)) {
     const dailyAvg = sold / 14;
@@ -119,59 +119,42 @@ const buildRestockSuggestions = async () => {
 const buildBusinessSnapshot = async () => {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const r2 = (n) => Math.round(n * 100) / 100;
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const yStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const yEnd = new Date(todayStart.getTime() - 1);
+  const since = yStart < monthStart ? yStart : monthStart;
+  const r2 = n => Math.round(n * 100) / 100;
+  const [monthProjection, previousProjection, expenses, incomes, custOrders, invs, supplierPos] = await Promise.all([
+    projectTrades('sale', monthStart, monthEnd),
+    yStart < monthStart ? projectTrades('sale', yStart, yEnd) : Promise.resolve(null),
+    prisma.expense.findMany({ where: { expenseDate: { gte: since, lte: monthEnd } }, select: { amount: true, category: true, expenseDate: true } }),
+    prisma.income.findMany({ where: { incomeDate: { gte: since, lte: monthEnd } }, select: { amount: true, incomeDate: true } }),
+    prisma.order.findMany({ where: { status: 'completed' }, select: { customerId: true, actualAmount: true, paidAmount: true, customer: { select: { name: true } } } }),
+    prisma.inventory.findMany({ where: { sku: { status: 1, product: { isDeleted: 0 } } }, include: { sku: { include: { product: true } } } }),
+    prisma.purchaseOrder.findMany({ where: { status: 'completed' }, select: { actualAmount: true, paidAmount: true, supplier: { select: { name: true } } } }),
+  ]);
 
-  const [monthOrders, monthItems, monthExpenses, monthIncomes, custOrders, payments, invs, monthItemsAgg, supplierPos] =
-    await Promise.all([
-      prisma.order.findMany({ where: { status: 'completed', createdAt: { gte: monthStart } }, select: { actualAmount: true, createdAt: true } }),
-      prisma.orderItem.findMany({
-        where: { order: { status: 'completed', createdAt: { gte: monthStart } } },
-        select: { quantity: true, sku: { select: { costPrice: true } }, product: { select: { costPrice: true } } },
-      }),
-      prisma.expense.findMany({ where: { expenseDate: { gte: monthStart } }, select: { amount: true, category: true, expenseDate: true } }),
-      prisma.income.findMany({ where: { incomeDate: { gte: monthStart } }, select: { amount: true } }),
-      prisma.order.findMany({ where: { status: 'completed' }, select: { customerId: true, actualAmount: true, customer: { select: { name: true } } } }),
-      prisma.paymentRecord.findMany({ select: { customerId: true, direction: true, amount: true } }),
-      prisma.inventory.findMany({
-        where: { sku: { status: 1, product: { isDeleted: 0 } } },
-        include: { sku: { include: { product: true } } },
-      }),
-      prisma.orderItem.findMany({
-        where: { order: { status: 'completed', createdAt: { gte: monthStart } } },
-        select: { productName: true, specText: true, quantity: true, subtotal: true },
-      }),
-      prisma.purchaseOrder.findMany({ where: { status: 'completed' }, select: { actualAmount: true, paidAmount: true, supplier: { select: { name: true } } } }),
-    ]);
-
-  // 客户欠款排行（应收 − 净收款）
+  // actual/paid 已是退货及收退款后的余额投影，不能再扣一次冲账流水。
   const owedByCustomer = {};
-  for (const o of custOrders) {
-    owedByCustomer[o.customerId] ??= { name: o.customer.name, owed: 0 };
-    owedByCustomer[o.customerId].owed += o.actualAmount;
+  for (const order of custOrders) {
+    owedByCustomer[order.customerId] ??= { name: order.customer.name, owed: 0 };
+    owedByCustomer[order.customerId].owed += order.actualAmount - order.paidAmount;
   }
-  for (const p of payments) {
-    if (p.customerId && owedByCustomer[p.customerId]) {
-      owedByCustomer[p.customerId].owed += p.direction === 'in' ? -p.amount : p.amount;
-    }
-  }
-  const customerOwedTop = Object.values(owedByCustomer)
-    .map((x) => ({ ...x, owed: r2(x.owed) }))
-    .filter((x) => x.owed > 0.01)
-    .sort((a, b) => b.owed - a.owed)
-    .slice(0, 5);
+  const customerOwedTop = Object.values(owedByCustomer).map(x => ({ ...x, owed: r2(x.owed) }))
+    .filter(x => x.owed > 0).sort((a, b) => b.owed - a.owed).slice(0, 5);
 
-  // 热销 Top5
-  const hot = {};
-  for (const it of monthItemsAgg) {
-    const k = it.productName + (it.specText ? ` ${it.specText}` : '');
-    hot[k] ??= { name: k, qty: 0, amount: 0 };
-    hot[k].qty += it.quantity;
-    hot[k].amount += it.subtotal;
+  // 热销的数量和金额与销售报表一样，包含发生在本月的退货及作废。
+  const hot = new Map();
+  for (const row of monthProjection.rows) {
+    const key = row.skuId == null ? `${row.productId}|${row.specText ?? ''}` : `sku:${row.skuId}`;
+    if (!hot.has(key)) hot.set(key, { name: row.productName + (row.specText ? ` ${row.specText}` : ''), qty: 0, amount: 0 });
+    const product = hot.get(key); product.qty += row.quantity; product.amount += row.netAmount;
   }
-  const topProducts = Object.values(hot).map((x) => ({ ...x, amount: r2(x.amount) })).sort((a, b) => b.amount - a.amount).slice(0, 5);
+  const topProducts = [...hot.values()].map(x => ({ ...x, qty: Math.round(x.qty * 1000) / 1000, amount: r2(x.amount) }))
+    .sort((a, b) => b.amount - a.amount).slice(0, 5);
 
-  // 库存
   let stockValue = 0;
   const lowStock = [];
   for (const inv of invs) {
@@ -180,40 +163,30 @@ const buildBusinessSnapshot = async () => {
       lowStock.push({ name: inv.sku.product.name + (inv.sku.specText ? ` ${inv.sku.specText}` : ''), stock: inv.quantity });
     }
   }
-
-  const monthSales = r2(monthOrders.reduce((s, o) => s + o.actualAmount, 0) + monthIncomes.reduce((s, i) => s + i.amount, 0));
-  const monthCogs = r2(monthItems.reduce((s, it) => s + it.quantity * (it.sku?.costPrice ?? it.product.costPrice ?? 0), 0));
-  const monthExpense = r2(monthExpenses.reduce((s, e) => s + e.amount, 0));
-  const todaySalesOrders = monthOrders.filter((o) => o.createdAt >= todayStart);
-  // "今天/昨天赚了多少"是开门第一问（首页本来就有昨天那一行）。
-  // 快照没有这两天的明细，AI 只能诚实拒答——等于白问，所以在这里补齐。
-  const yStart = new Date(todayStart.getTime() - 86400000);
-  const daySlice = (from, to) => {
-    const os = monthOrders.filter((o) => o.createdAt >= from && (!to || o.createdAt < to));
-    const sales = r2(os.reduce((s, o) => s + o.actualAmount, 0));
-    const exp = r2(monthExpenses.filter((e) => e.expenseDate >= from && (!to || e.expenseDate < to)).reduce((s, e) => s + e.amount, 0));
-    return { 销售额: sales, 经营开销: exp, 订单数: os.length };
+  const slice = (projection, from, to) => {
+    const rows = projection.rows.filter(row => row.occurredAt >= from && row.occurredAt <= to);
+    const sales = r2(rows.reduce((sum, row) => sum + row.netAmount, 0)
+      + incomes.filter(i => i.incomeDate >= from && i.incomeDate <= to).reduce((sum, i) => sum + i.amount, 0));
+    const costs = costSummary(rows);
+    const expense = r2(expenses.filter(e => e.expenseDate >= from && e.expenseDate <= to).reduce((sum, e) => sum + e.amount, 0));
+    // 未知成本不能伪装成零成本给模型计算确定利润；已知部分独立标明。
+    return { 销售额: sales, 销货成本: costs.profitUnreliable ? null : costs.cogs, 已知销货成本: costs.cogs,
+      经营开销: expense, 毛利: costs.profitUnreliable || projection.historyIncomplete ? null : r2(sales - costs.cogs - expense),
+      订单数: orderCount(rows, 'sale'), 成本数据不完整: costs.profitUnreliable, 无成本销售额: costs.noCostSales,
+      历史记录不完整: projection.historyIncomplete };
   };
-  const todayAgg = daySlice(todayStart, null);
-  const yAgg = yStart >= monthStart ? daySlice(yStart, todayStart) : null; // 1号时昨天在上个月，本月数据里没有，宁可不给也不给错的
-
-  const supplierOwed = supplierPos
-    .filter((p) => p.actualAmount - p.paidAmount > 0.01)
-    .map((p) => ({ name: p.supplier?.name ?? '无名供应商', owed: r2(p.actualAmount - p.paidAmount) }));
-
+  const monthAgg = slice(monthProjection, monthStart, monthEnd);
+  const todayAgg = slice(monthProjection, todayStart, todayEnd);
+  const yesterdayAgg = slice(previousProjection ?? monthProjection, yStart, yEnd);
+  const supplierOwed = supplierPos.filter(p => r2(p.actualAmount - p.paidAmount) > 0)
+    .map(p => ({ name: p.supplier?.name ?? '无名供应商', owed: r2(p.actualAmount - p.paidAmount) }));
   return {
-    今天: localDayKey(now), // 本地时区，否则早上 8 点前 AI 会说成昨天
-    本月: { 销售额: monthSales, 销货成本: monthCogs, 经营开销: monthExpense, 毛利: r2(monthSales - monthCogs - monthExpense), 订单数: monthOrders.length },
-    今日: todayAgg,
-    昨日: yAgg ?? '（昨天不在本月，快照没取）',
-    今日订单数: todaySalesOrders.length,
-    客户欠款排行: customerOwedTop,
-    我欠供应商: supplierOwed,
-    本月热销Top5: topProducts,
+    今天: localDayKey(now),
+    本月: monthAgg, 今日: todayAgg, 昨日: yesterdayAgg, 今日订单数: todayAgg.订单数,
+    客户欠款排行: customerOwedTop, 我欠供应商: supplierOwed, 本月热销Top5: topProducts,
     库存: { 成本总值: r2(stockValue), 预警缺货: lowStock },
-    // 确定性销速公式算好的补货清单：AI 只负责"说人话"，不许自己推算该补多少
     补货建议_按销速计算: await buildRestockSuggestions(),
-    本月开销分类: monthExpenses.reduce((m, e) => ((m[e.category] = r2((m[e.category] ?? 0) + e.amount)), m), {}),
+    本月开销分类: expenses.filter(e => e.expenseDate >= monthStart).reduce((m, e) => ((m[e.category] = r2((m[e.category] ?? 0) + e.amount)), m), {}),
   };
 };
 

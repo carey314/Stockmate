@@ -3,6 +3,7 @@ import { PrinterOutlined } from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
 import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
+import { fetchAllPages } from '../api/pagination'
 import { useAuth } from '../auth'
 import { fmtMoney } from '../lib/format'
 import { t } from '../lib/i18n'
@@ -40,42 +41,52 @@ export default function StatementsPage() {
   const [parties, setParties] = useState<Party[]>([])
   const [partyId, setPartyId] = useState<number | null>(null)
   const [range, setRange] = useState<[Dayjs, Dayjs]>([dayjs().startOf('month'), dayjs()])
-  const [data, setData] = useState<Statement | null>(null)
+  const [snapshot, setSnapshot] = useState<{ key: string; start: string; end: string; data: Statement } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const start = range[0].format('YYYY-MM-DD')
+  const end = range[1].format('YYYY-MM-DD')
+  const queryKey = JSON.stringify([mode, partyId, start, end])
+  const data = !loading && !error && snapshot?.key === queryKey ? snapshot.data : null
 
   // 切换客户/供应商时拉对象列表（客户按欠款降序，欠钱的排前面）
   useEffect(() => {
     setPartyId(null)
-    setData(null)
-    api
-      .get<{ list: Party[] }>(mode === 'customer' ? '/customers' : '/suppliers', { page: 1, pageSize: 200 })
+    setSnapshot(null)
+    setParties([])
+    setError(null)
+    let alive = true
+    fetchAllPages<Party>(mode === 'customer' ? '/customers' : '/suppliers')
       .then((d) => {
-        const list = [...d.list]
+        if (!alive) return
+        const list = [...d]
         if (mode === 'customer') list.sort((a, b) => (b.owed ?? 0) - (a.owed ?? 0))
         setParties(list)
       })
-      .catch((e) => setError((e as Error).message))
+      .catch((e) => alive && setError((e as Error).message))
+    return () => { alive = false }
   }, [mode])
 
   useEffect(() => {
-    if (!partyId) return
+    setSnapshot(null)
+    if (!partyId) { setLoading(false); return }
     let alive = true
     setLoading(true)
     setError(null)
     api
       .get<Statement>(mode === 'customer' ? '/reports/customer-statement' : '/reports/supplier-statement', {
         [mode === 'customer' ? 'customerId' : 'supplierId']: partyId,
-        startDate: range[0].format('YYYY-MM-DD'),
-        endDate: range[1].format('YYYY-MM-DD'),
+        startDate: start,
+        endDate: end,
       })
-      .then((d) => alive && setData(d))
+      .then((d) => alive && setSnapshot({ key: queryKey, start, end, data: d }))
       .catch((e) => alive && setError((e as Error).message))
       .finally(() => alive && setLoading(false))
     return () => {
       alive = false
     }
-  }, [mode, partyId, range])
+  }, [mode, partyId, start, end, queryKey])
 
   const party = data?.customer ?? data?.supplier
   const isCustomer = mode === 'customer'
@@ -107,7 +118,7 @@ export default function StatementsPage() {
           {(['customer', 'supplier'] as Mode[]).map((m) => (
             <span
               key={m}
-              onClick={() => setMode(m)}
+              onClick={() => { setPartyId(null); setMode(m) }}
               style={{
                 padding: '6px 14px',
                 borderRadius: 999,
@@ -203,7 +214,7 @@ export default function StatementsPage() {
             </span>
             <span>
               {t('账期：', 'Period: ')}
-              {range[0].format('YYYY-MM-DD')} ~ {range[1].format('YYYY-MM-DD')}
+              {snapshot?.start} ~ {snapshot?.end}
             </span>
             <span>
               {t('打印时间：', 'Printed: ')}

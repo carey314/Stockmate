@@ -1,5 +1,7 @@
 import {
   App,
+  Alert,
+  Skeleton,
   Button,
   Form,
   Input,
@@ -16,7 +18,10 @@ import { DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined } from '@ant
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api, { assetUrl } from '../api/client'
+import { fetchAllPages } from '../api/pagination'
 import { useAuth } from '../auth'
+import { useInventoryAlerts } from '../hooks/useInventoryAlerts'
+import { sessionSnapshot, isCurrentSession } from '../lib/session'
 import { EditNum, EditText } from '../components/EditableCells'
 import ImageUpload from '../components/ImageUpload'
 import InventoryMoveModal from '../components/InventoryMoveModal'
@@ -121,7 +126,14 @@ export default function ProductsPage() {
   const [rows, setRows] = useState<ProductRow[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [alerts, setAlerts] = useState<AlertRow[]>([])
+  const alertState = useInventoryAlerts()
+  const alerts = alertState.data ?? []
+  const loadAlerts = alertState.refresh
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null)
+  const productRequest = useRef(0)
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false; productRequest.current++ } }, [])
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   // 出入库/报损、库存流水、配方（两端功能对齐补齐项）
   const [moveOpen, setMoveOpen] = useState(false)
@@ -130,20 +142,22 @@ export default function ProductsPage() {
   const [allSkuOpts, setAllSkuOpts] = useState<{ skuId: number; label: string }[]>([])
   const ensureAllSkuOpts = () => {
     if (allSkuOpts.length) return
-    api
-      .get<{ list: { name: string; skus: { id: number; specText: string }[] }[] }>('/products', { pageSize: 500 })
+    fetchAllPages<{ name: string; skus: { id: number; specText: string }[] }>('/products')
       .then((d) => {
         const opts: { skuId: number; label: string }[] = []
-        for (const pp of d.list) for (const ss of pp.skus) opts.push({ skuId: ss.id, label: `${pp.name}${ss.specText ? ` ${ss.specText}` : ''}` })
+        for (const pp of d) for (const ss of pp.skus) opts.push({ skuId: ss.id, label: `${pp.name}${ss.specText ? ` ${ss.specText}` : ''}` })
         setAllSkuOpts(opts)
       })
-      .catch(() => {})
+      .catch((e) => message.error((e as Error).message))
   }
   const initialType = useRef(false)
 
   // ===== 数据加载 =====
   const load = useCallback(async () => {
+    const ticket = ++productRequest.current, owner = sessionSnapshot()
+    const current = () => alive.current && ticket === productRequest.current && isCurrentSession(owner)
     setLoading(true)
+    setLoadError(null)
     try {
       const data = await api.get<{ list: ProductRow[]; pagination: { total: number } }>('/products', {
         page,
@@ -152,18 +166,13 @@ export default function ProductsPage() {
         // 搜索时忽略品类筛选，跨全部品类找（在"馄饨"tab 搜"啤酒"也要搜得到，符合直觉）
         ...(!keyword && typeof typeFilter === 'number' ? { productTypeId: typeFilter } : {}),
       })
-      setRows(data.list)
-      setTotal(data.pagination.total)
+      if (current()) { setRows(data.list); setTotal(data.pagination.total); setLastLoadedAt(new Date().toISOString()) }
     } catch (e) {
-      message.error((e as Error).message)
+      if (current()) setLoadError((e as Error).message)
     } finally {
-      setLoading(false)
+      if (current()) setLoading(false)
     }
-  }, [page, pageSize, keyword, typeFilter, message])
-
-  const loadAlerts = useCallback(() => {
-    api.get<AlertRow[]>('/inventory/alerts').then(setAlerts).catch(() => {})
-  }, [])
+  }, [page, pageSize, keyword, typeFilter])
 
   useEffect(() => {
     api
@@ -187,6 +196,21 @@ export default function ProductsPage() {
     if (typeFilter !== 'lowstock') load()
     else loadAlerts() // 进低库存视图时重拉，预警数据不吃缓存
   }, [load, loadAlerts, typeFilter])
+
+  // Entering the page, returning to the visible tab, and explicit refresh re-read stock.
+  // This is not a real-time push subscription.
+  useEffect(() => {
+    const refreshVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (typeFilter !== 'lowstock') void load()
+      void loadAlerts()
+    }
+    window.addEventListener('focus', refreshVisible)
+    document.addEventListener('visibilitychange', refreshVisible)
+    return () => { window.removeEventListener('focus', refreshVisible); document.removeEventListener('visibilitychange', refreshVisible) }
+  }, [load, loadAlerts, typeFilter])
+
+  const reloadAfterChange = () => { void load(); void loadAlerts() }
 
   // ===== 行内直改 =====
   const patchSku = (skuId: number, patch: Partial<SkuRow> & { quantity?: number; minQuantity?: number }) => {
@@ -250,7 +274,7 @@ export default function ProductsPage() {
         )
       }
       setSelectedKeys([])
-      load()
+      reloadAfterChange()
     } finally {
       setBatchDeleting(false)
     }
@@ -342,7 +366,7 @@ export default function ProductsPage() {
       message.success(t(`已创建「${v.name}」`, `Created "${v.name}"`))
       setCreateOpen(false)
       createForm.resetFields()
-      load()
+      reloadAfterChange()
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -380,7 +404,7 @@ export default function ProductsPage() {
       message.success(t('规格已添加', 'Variant added'))
       setSkuTarget(null)
       skuForm.resetFields()
-      load()
+      reloadAfterChange()
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -416,7 +440,7 @@ export default function ProductsPage() {
       })
       message.success(t('已保存', 'Saved'))
       setEditProduct(null)
-      load()
+      reloadAfterChange()
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -429,7 +453,7 @@ export default function ProductsPage() {
     try {
       await api.delete(`/products/${p.id}`)
       message.success(t(`已删除「${p.name}」`, `Deleted "${p.name}"`))
-      load()
+      reloadAfterChange()
     } catch (e) {
       message.error((e as Error).message)
     }
@@ -438,7 +462,7 @@ export default function ProductsPage() {
     try {
       await api.delete(`/skus/${s.id}`)
       message.success(t('规格已停用', 'Variant disabled'))
-      load()
+      reloadAfterChange()
     } catch (e) {
       message.error((e as Error).message)
     }
@@ -673,9 +697,10 @@ export default function ProductsPage() {
     <Table<AlertRow>
       rowKey="id"
       dataSource={alerts}
+      loading={alertState.loading}
       pagination={false}
       size="middle"
-      locale={{ emptyText: t('没有低于预警线的规格 👍', 'Nothing below its low-stock alert 👍') }}
+      locale={{ emptyText: alertState.error || alertState.loading ? t('预警尚未更新', 'Alerts are not current') : t('没有低于预警线的规格 👍', 'Nothing below its low-stock alert 👍') }}
       columns={[
         {
           title: t('商品 / 规格', 'Product / Variant'),
@@ -700,8 +725,7 @@ export default function ProductsPage() {
                   quantity: v,
                   reason: '手动调整库存（Web 后台）',
                 })
-                loadAlerts()
-                load()
+                reloadAfterChange()
               }}
             />
           ),
@@ -720,7 +744,7 @@ export default function ProductsPage() {
     ...types.map((ty) => ({ key: ty.id, label: ty.name })),
     {
       key: 'lowstock' as const,
-      label: t(`低库存${alerts.length ? ` ${alerts.length}` : ''}`, `Low stock${alerts.length ? ` ${alerts.length}` : ''}`),
+      label: t(`低库存${alertState.error ? ' · 未更新' : alerts.length ? ` ${alerts.length}` : ''}`, `Low stock${alertState.error ? ' · not current' : alerts.length ? ` ${alerts.length}` : ''}`),
     },
   ]
 
@@ -772,12 +796,17 @@ export default function ProductsPage() {
             }, 400)
           }}
         />
+        <Button onClick={() => { if (typeFilter !== 'lowstock') void load(); void loadAlerts() }}>{t('刷新库存', 'Refresh stock')}</Button>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
           {t('新增商品', 'New product')}
         </Button>
         <Button onClick={() => setMoveOpen(true)}>{t('出入库 / 报损', 'Stock in/out & loss')}</Button>
       </div>
 
+      {alertState.error && <Alert type="warning" showIcon title={t('低库存加载失败', 'Low-stock alerts failed to load')} description={`${alertState.error}。${alertState.updatedAt ? t('当前展示旧数据，不代表最新库存。', 'Showing old data; stock may have changed.') : t('尚无成功数据，不能判断是否缺货。', 'No successful snapshot; stock status is unknown.')}`} action={<Button onClick={loadAlerts} loading={alertState.loading}>{t('重试预警', 'Retry alerts')}</Button>} />}
+      {typeFilter !== 'lowstock' && loadError && <Alert type="warning" showIcon title={t('商品库存未刷新', 'Product stock was not refreshed')} description={`${loadError}${lastLoadedAt ? t(`；当前为旧数据，上次成功更新：${new Date(lastLoadedAt).toLocaleString()}`, `; old data, last updated: ${new Date(lastLoadedAt).toLocaleString()}`) : ''}`} action={<Button onClick={load}>{t('重试商品', 'Retry products')}</Button>} />}
+      {typeFilter === 'lowstock' && alertState.updatedAt && <Typography.Text type="secondary">{t('上次成功更新：', 'Last successful update: ')}{new Date(alertState.updatedAt).toLocaleString()}{alertState.loading ? t(' · 正在刷新，以下为上次数据', ' · Refreshing; previous snapshot below') : ''}</Typography.Text>}
+      <Typography.Text type="secondary">{t('进入页面、操作后和返回页面时刷新；也可点击“刷新库存”。页面持续停留时不会实时推送。', 'Refreshes on entry, after changes and on return. You can also refresh manually; stock is not pushed in real time.')}</Typography.Text>
       {/* 批量操作条 */}
       {selectedKeys.length > 0 && typeFilter !== 'lowstock' && (
         <div
@@ -823,7 +852,7 @@ export default function ProductsPage() {
 
       <div style={{ ...cardStyle, padding: '8px 16px 16px', overflow: 'hidden' }}>
         {typeFilter === 'lowstock' ? (
-          lowStockView
+          alertState.data === null ? (alertState.loading ? <><Typography.Text>{t('正在加载低库存…', 'Loading low-stock alerts…')}</Typography.Text><Skeleton active /></> : null) : lowStockView
         ) : (
           <Table<ProductRow>
             rowKey="id"
@@ -1081,8 +1110,7 @@ export default function ProductsPage() {
         open={moveOpen}
         onClose={() => setMoveOpen(false)}
         onDone={() => {
-          load()
-          loadAlerts()
+          reloadAfterChange()
         }}
       />
       <SkuRecordsDrawer sku={recordsSku} onClose={() => setRecordsSku(null)} />

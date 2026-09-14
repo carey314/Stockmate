@@ -1,5 +1,6 @@
 import {
   App,
+  Alert,
   Button,
   DatePicker,
   Drawer,
@@ -16,10 +17,13 @@ import {
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import dayjs, { type Dayjs } from 'dayjs'
 import api from '../api/client'
+import { useAuth } from '../auth'
+import { draftStorage } from '../lib/draftStorage'
+import { fetchAllPages } from '../api/pagination'
 import { fmtMoney, fmtQty, fmtTime } from '../lib/format'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
@@ -82,8 +86,21 @@ interface Line {
   unitPrice: number
 }
 
+interface PurchaseDraft {
+  supplierId: number | null; lines: Line[]; paid: number | null; account: string; notes: string
+  pending: Record<string, unknown> | null; completed: boolean
+}
+const emptyDraft: PurchaseDraft = { supplierId: null, lines: [], paid: null, account: '现金', notes: '', pending: null, completed: false }
+
 export default function PurchasePage() {
   const { message } = App.useApp()
+  const { user, profile } = useAuth()
+  const [storage] = useState(() => draftStorage<PurchaseDraft>('purchase', user?.id, profile?.storeId))
+  const saved = storage.initial
+  const [storageError, setStorageError] = useState(storage.readError)
+  const alive = useRef(true)
+  const createFlight = useRef(false)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   // 筛选进 URL（与订单页同构）：刷新/分享不丢视图
   const [urlParams, setUrlParams] = useSearchParams()
   const [filter, setFilter] = useState<Filter>(() => {
@@ -135,10 +152,7 @@ export default function PurchasePage() {
         ...(range ? { startDate: range[0].format('YYYY-MM-DD'), endDate: range[1].format('YYYY-MM-DD') } : {}),
         ...(kw ? { keyword: kw } : {}),
       })
-      // 后端 unpaidOnly 是取完当页再 filter，前端 cancelled 也可能混入；按当前筛选二次收敛显示
-      let list = data.list
-      if (filter === 'cancelled') list = list.filter((o) => o.status === 'cancelled')
-      setRows(list)
+      setRows(data.list)
       setTotal(data.pagination.total)
     } catch (e) {
       message.error((e as Error).message)
@@ -150,18 +164,24 @@ export default function PurchasePage() {
     load()
   }, [load])
 
-  // 建单要用的供应商 + SKU 选项
+  const [optionsError, setOptionsError] = useState<string | null>(null)
+  const [optionsLoading, setOptionsLoading] = useState(true)
+  const [optionsRetry, setOptionsRetry] = useState(0)
   useEffect(() => {
-    api.get<{ list: Supplier[] }>('/suppliers', { pageSize: 200 }).then((d) => setSuppliers(d.list)).catch(() => {})
-    api
-      .get<{ list: { id: number; name: string; skus: { id: number; specText: string; costPrice: number | null }[] }[] }>('/products', { pageSize: 500 })
-      .then((d) => {
-        const opts: SkuOption[] = []
-        for (const p of d.list) for (const s of p.skus) opts.push({ skuId: s.id, label: `${p.name}${s.specText ? ` ${s.specText}` : ''}`, costPrice: s.costPrice })
-        setSkuOpts(opts)
-      })
-      .catch(() => {})
-  }, [])
+    let alive = true
+    setOptionsError(null)
+    setOptionsLoading(true)
+    Promise.all([
+      fetchAllPages<Supplier>('/suppliers'),
+      fetchAllPages<{ id: number; name: string; skus: { id: number; specText: string; costPrice: number | null }[] }>('/products'),
+    ]).then(([parties, products]) => {
+      if (!alive) return
+      setSuppliers(parties)
+      setSkuOpts(products.flatMap((p) => p.skus.map((s) => ({ skuId: s.id, label: `${p.name}${s.specText ? ` ${s.specText}` : ''}`, costPrice: s.costPrice }))))
+    }).catch((e) => { if (alive) { setOptionsError((e as Error).message); setSuppliers([]); setSkuOpts([]) } })
+      .finally(() => { if (alive) setOptionsLoading(false) })
+    return () => { alive = false }
+  }, [optionsRetry])
 
   // ===== 详情 =====
   const [detail, setDetail] = useState<PODetail | null>(null)
@@ -200,15 +220,22 @@ export default function PurchasePage() {
   }, [])
 
   // ===== 建单 =====
-  const [createOpen, setCreateOpen] = useState(false)
-  const [supplierId, setSupplierId] = useState<number | null>(null)
-  const [lines, setLines] = useState<Line[]>([])
-  const [paid, setPaid] = useState<number | null>(null)
-  const [account, setAccount] = useState('现金')
-  const [notes, setNotes] = useState('')
+  const [createOpen, setCreateOpen] = useState(!!saved && (!!saved.lines.length || !!saved.notes || !!saved.pending))
+  const [supplierId, setSupplierId] = useState<number | null>(saved?.supplierId ?? null)
+  const [lines, setLines] = useState<Line[]>(saved?.lines ?? [])
+  const [paid, setPaid] = useState<number | null>(saved?.paid ?? null)
+  const [account, setAccount] = useState(saved?.account ?? '现金')
+  const [notes, setNotes] = useState(saved?.notes ?? '')
   const [createBusy, setCreateBusy] = useState(false)
+  const [pending, setPending] = useState<Record<string, unknown> | null>(saved?.pending ?? null)
+  const [completed, setCompleted] = useState(saved?.completed ?? false)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+  const snapshot = (): PurchaseDraft => ({ supplierId, lines, paid, account, notes, pending, completed })
+  useEffect(() => {
+    if (storage.current()) setStorageError(storage.write({ supplierId, lines, paid, account, notes, pending, completed }))
+  }, [storage, supplierId, lines, paid, account, notes, pending, completed])
 
-  const linesTotal = useMemo(() => lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0), [lines])
+  const linesTotal = useMemo(() => lines.reduce((s, l) => s + Math.round(l.quantity * l.unitPrice * 100), 0) / 100, [lines])
 
   const addLine = (skuId: number) => {
     if (lines.some((l) => l.skuId === skuId)) return
@@ -220,6 +247,9 @@ export default function PurchasePage() {
   const removeLine = (skuId: number) => setLines((prev) => prev.filter((l) => l.skuId !== skuId))
 
   const resetCreate = () => {
+    setPending(null)
+    setCompleted(false)
+    setConfirmError(null)
     setSupplierId(null)
     setLines([])
     setPaid(null)
@@ -227,25 +257,51 @@ export default function PurchasePage() {
     setNotes('')
   }
   const submitCreate = async () => {
-    if (lines.length === 0) return message.warning(t('至少加一件商品', 'Add at least one product'))
-    if (lines.some((l) => l.quantity <= 0)) return message.warning(t('数量要大于 0', 'Quantity must be greater than 0'))
-    setCreateBusy(true)
-    try {
-      await api.post('/purchase-orders', {
-        supplierId: supplierId ?? null,
+    if (!storage.current() || storage.readError || createFlight.current) return
+    if (completed) {
+      const error = storage.write(emptyDraft)
+      setStorageError(error)
+      if (!error) { resetCreate(); setCreateOpen(false) }
+      return
+    }
+    let body = pending
+    if (!body) {
+      if (lines.length === 0) return message.warning(t('至少加一件商品', 'Add at least one product'))
+      if (lines.some((l) => !Number.isFinite(l.quantity) || l.quantity <= 0 || !Number.isFinite(l.unitPrice) || l.unitPrice < 0)) return message.warning(t('数量和进价须为有效数值', 'Enter valid quantities and prices'))
+      if (optionsLoading || optionsError) return message.warning(t('商品或供应商尚未完整加载，请重试', 'Products or suppliers could not be fully loaded; retry'))
+      const paidAmount = paid ?? (account === '挂账' ? 0 : linesTotal)
+      if (!Number.isFinite(paidAmount) || paidAmount < 0 || paidAmount > linesTotal) return message.warning(t('已付金额须在 0 到应付金额之间', 'Paid amount must be between zero and the total'))
+      if (account === '挂账' && paidAmount !== 0) return message.warning(t('挂账不能填写付款额，请选择实际付款账户', 'Select a payment account to record a payment'))
+      if (paidAmount < linesTotal && !supplierId) return message.warning(t('有欠款时必须选择供应商', 'Select a supplier for an outstanding balance'))
+      body = {
+        requestId: crypto.randomUUID(), supplierId: supplierId ?? null,
         items: lines.map((l) => ({ skuId: l.skuId, quantity: l.quantity, unitPrice: l.unitPrice })),
-        paidAmount: paid ?? undefined,
-        settlementAccount: account,
-        notes: notes.trim() || null,
-      })
+        paidAmount, settlementAccount: account, notes: notes.trim() || null,
+      }
+      setPending(body)
+    }
+    const error = storage.write({ ...snapshot(), pending: body })
+    setStorageError(error)
+    if (error) return
+    createFlight.current = true
+    setCreateBusy(true)
+    setConfirmError(null)
+    try {
+      await api.post('/purchase-orders', body)
+      if (!alive.current || !storage.current()) return
       message.success(t('进货单已建，库存已入库', 'Purchase order created, stock received'))
-      setCreateOpen(false)
-      resetCreate()
+      const clearError = storage.write(emptyDraft)
+      setStorageError(clearError)
+      if (clearError) setCompleted(true)
+      else { setCreateOpen(false); resetCreate() }
       load()
     } catch (e) {
+      if (!alive.current || !storage.current()) return
+      setConfirmError((e as Error).message)
+      if ([400, 404].includes((e as { status?: number }).status ?? 0)) setPending(null)
       message.error((e as Error).message)
     } finally {
-      setCreateBusy(false)
+      if (alive.current && storage.current()) { createFlight.current = false; setCreateBusy(false) }
     }
   }
 
@@ -414,6 +470,9 @@ export default function PurchasePage() {
         />
       </div>
 
+      {storageError && <Alert type="error" showIcon message={storageError} />}
+      {saved && (saved.lines.length > 0 || saved.notes || saved.pending) && !completed && <Alert type="info" message={t('已恢复本账号进货草稿', 'Your purchase draft was restored')} />}
+      {optionsError && <Alert type="error" showIcon message={optionsError} action={<Button onClick={() => setOptionsRetry((n) => n + 1)}>重试</Button>} />}
       {/* 建单 */}
       <Modal
         title={t('新建进货单', 'New purchase order')}
@@ -421,14 +480,19 @@ export default function PurchasePage() {
         onCancel={() => setCreateOpen(false)}
         onOk={submitCreate}
         confirmLoading={createBusy}
-        okText={t('确认进货（自动入库）', 'Confirm purchase (auto stock-in)')}
+        okText={completed ? t('已入账，清理草稿', 'Recorded; clear draft') : pending ? t('重试同一笔进货', 'Retry this purchase') : t('确认进货（自动入库）', 'Confirm purchase (auto stock-in)')}
         width={720}
       >
+        {completed && <Alert type="success" message={t('进货已入账，请重试清理草稿，不会重复提交。', 'Purchase recorded. Retry clearing the draft; it will not be submitted again.')} />}
+        {pending && !completed && <Alert type="warning" message={t('草稿已锁定，重试将使用原编号和原金额。', 'Draft locked. Retry uses the original ID and amounts.')} />}
+        {confirmError && <Alert type="warning" message={confirmError} />}
+        <fieldset disabled={!!pending || completed} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
           <Select
+            disabled={!!pending || completed}
             allowClear
             showSearch
-            placeholder={t('选供应商（可不选）', 'Select supplier (optional)')}
+            placeholder={t('选供应商（有欠款时必选）', 'Select supplier (required for credit)')}
             value={supplierId}
             onChange={(v) => setSupplierId(v ?? null)}
             optionFilterProp="label"
@@ -436,6 +500,7 @@ export default function PurchasePage() {
             style={{ width: 220 }}
           />
           <Select<number>
+            disabled={!!pending || completed}
             showSearch
             placeholder={t('加商品：搜名称/规格', 'Add product: search by name / spec')}
             value={null}
@@ -490,12 +555,13 @@ export default function PurchasePage() {
               precision={2}
               max={linesTotal}
               placeholder={String(linesTotal)}
-              value={paid}
+              value={account === '挂账' ? 0 : paid}
+              disabled={!!pending || completed || account === '挂账'}
               onChange={(v) => setPaid(v)}
               style={{ width: 110, marginLeft: 6 }}
             />
           </span>
-          <Select size="small" value={account} onChange={setAccount} options={ACCOUNTS.map((a) => ({ value: a, label: accountLabel(a) }))} style={{ width: 100 }} />
+          <Select disabled={!!pending || completed} size="small" value={account} onChange={(v) => { setAccount(v); if (v === '挂账') setPaid(0) }} options={ACCOUNTS.map((a) => ({ value: a, label: accountLabel(a) }))} style={{ width: 100 }} />
         </div>
         {paid !== null && paid < linesTotal && (
           <div style={{ textAlign: 'right', marginTop: 6, fontSize: 12, color: T.error }}>
@@ -510,6 +576,7 @@ export default function PurchasePage() {
           style={{ marginTop: 10 }}
           maxLength={200}
         />
+        </fieldset>
       </Modal>
 
       {/* 详情 */}

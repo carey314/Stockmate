@@ -1,75 +1,54 @@
-// 苹果内购收据校验。
-//
-// 用的是 verifyReceipt 接口：一次 POST 带上整份 App 收据和 App 专用共享密钥，
-// 苹果把这个 Apple ID 下所有交易连同到期时间一起还回来。
-// 苹果标记它为「已弃用」，推荐 App Store Server API（需要 .p8 私钥 + ES256 签 JWT +
-// 按 transactionId 逐笔查）。对我们这个体量，verifyReceipt 少写一大半代码而且照常工作，
-// 先用它上线；等订阅量起来或苹果真关停，再迁到 Server API（换掉本文件即可，
-// 上层 grantEntitlement 那套一行不用动）。
-//
-// 关键约定：
-//   - 先打生产环境，收到 21007 再打沙盒。**顺序不能反**——沙盒收据打生产会返回 21007，
-//     而生产收据打沙盒返回 21008。苹果审核用的是沙盒账号，只打生产就会把审核员挡在门外。
-//   - 只认「未过期的自动续期订阅」，取到期最晚的那条为准（用户可能升降档过）。
+// Apple HTTPS验证结果是事实源；客户端交易ID/商品ID仅用于选择本次事件。
+const { httpError } = require('./biz');
+const PRODUCTS = new Set(['com.carey.stockmate.pro.monthly', 'com.carey.stockmate.pro.yearly']);
 const PROD = 'https://buy.itunes.apple.com/verifyReceipt';
 const SANDBOX = 'https://sandbox.itunes.apple.com/verifyReceipt';
-
-// 苹果 status 码里需要区别对待的几个
-const STATUS_SANDBOX_RECEIPT_ON_PROD = 21007;
-const STATUS_PROD_RECEIPT_ON_SANDBOX = 21008;
-
-const post = async (url, receipt, secret) => {
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      'receipt-data': receipt,
-      password: secret,
-      'exclude-old-transactions': false, // 要全量，才能算出最晚到期时间
-    }),
-  });
-  if (!r.ok) throw new Error(`苹果校验服务返回 ${r.status}`);
-  return r.json();
-};
-
-/// 校验收据，返回 { productId, expiresAt, originalTransactionId, environment } 或 null（无有效订阅）
-const verifyAppleReceipt = async (receiptBase64) => {
-  const secret = process.env.APPLE_SHARED_SECRET;
-  if (!secret) throw Object.assign(new Error('未配置 APPLE_SHARED_SECRET'), { status: 503 });
-
-  let env = 'production';
-  let data = await post(PROD, receiptBase64, secret);
-  if (data.status === STATUS_SANDBOX_RECEIPT_ON_PROD) {
-    env = 'sandbox';
-    data = await post(SANDBOX, receiptBase64, secret);
-  } else if (data.status === STATUS_PROD_RECEIPT_ON_SANDBOX) {
-    // 理论上不会走到（我们先打生产），留着是为了报错能说清原因
-    throw Object.assign(new Error('收据环境不匹配（生产收据打到了沙盒）'), { status: 400 });
+const date = value => { const n=Number(value); return Number.isSafeInteger(n) && n>0 && n<=8640000000000000 ? new Date(n) : null; };
+async function post(url, receipt, secret) {
+  const response = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(15000), body:JSON.stringify({'receipt-data':receipt,password:secret,'exclude-old-transactions':false}) });
+  if(!response.ok) throw httpError(502,'Apple校验服务暂不可用，请保留购买记录后重试');
+  return response.json();
+}
+function validatedReceipt(data, environment, selector={}) {
+  if (![0,21006].includes(data.status)) throw httpError(400,`收据无效（Apple status=${data.status}）`);
+  if(data.receipt?.bundle_id !== (process.env.APPLE_BUNDLE_ID || 'com.carey.stockmate')) throw httpError(400,'收据不属于本应用');
+  if(data.environment !== (environment==='sandbox'?'Sandbox':'Production')) throw httpError(400,'收据环境不匹配');
+  const rows=Array.isArray(data.latest_receipt_info)?data.latest_receipt_info:[];
+  const supported=rows.filter(r=>PRODUCTS.has(r.product_id));
+  let selected;
+  if(selector.transactionId) {
+    selected=supported.find(r=>r.transaction_id===selector.transactionId && (!selector.productId||r.product_id===selector.productId));
+    if(!selected)throw httpError(400,'收据中不存在本次交易或商品不匹配');
+  } else {
+    const chains=new Set(supported.map(r=>r.original_transaction_id));
+    if(chains.size>1)throw httpError(400,'收据包含多条订阅，请提供本次交易ID和商品ID');
+    selected=supported[0];
   }
-  if (data.status !== 0) {
-    throw Object.assign(new Error(`收据无效（苹果 status=${data.status}）`), { status: 400 });
+  if(!selected)return null;
+  if(!selected.transaction_id||!selected.original_transaction_id)throw httpError(400,'Apple交易标识缺失');
+  const chain=supported.filter(r=>r.original_transaction_id===selected.original_transaction_id);
+  for(const r of chain)if(!date(r.purchase_date_ms)||!date(r.expires_date_ms)||!r.transaction_id||['cancellation_date_ms','revocation_date_ms'].some(k=>r[k]!=null&&!date(r[k])))throw httpError(400,'Apple交易日期或标识无效');
+  chain.sort((a,b)=>Number(b.purchase_date_ms)-Number(a.purchase_date_ms)||Number(b.expires_date_ms)-Number(a.expires_date_ms));
+  const latest=chain[0], revokedAt=date(latest.cancellation_date_ms??latest.revocation_date_ms);
+  let expiresAt=date(latest.expires_date_ms);
+  const renewal=(Array.isArray(data.pending_renewal_info)?data.pending_renewal_info:[]).find(r=>r.original_transaction_id===latest.original_transaction_id&&r.product_id===latest.product_id);
+  const grace=renewal?.is_in_billing_retry_period==='1'?date(renewal.grace_period_expires_date_ms):null;
+  if(grace&&grace>expiresAt)expiresAt=grace;
+  const status=revokedAt?'refunded':expiresAt.getTime()<=Date.now()?'expired':'active';
+  return {productId:selected.product_id,transactionId:selected.transaction_id,originalTransactionId:selected.original_transaction_id,latestTransactionId:latest.transaction_id,latestProductId:latest.product_id,expiresAt,purchasedAt:date(latest.purchase_date_ms),verifiedAt:date(data.receipt.request_date_ms)||new Date(),revokedAt,environment,status,isActive:status==='active'};
+}
+async function verifyAppleReceipt(receipt,selector={}) {
+  if(receipt.includes('.')) {
+    const info=await require('./appleSignedData').verifyAppleSignedTransaction(receipt);
+    if(!PRODUCTS.has(info.productId)||!info.transactionId||!info.originalTransactionId||!date(info.purchaseDate)||!date(info.expiresDate)||!date(info.signedDate)||(info.revocationDate!=null&&!date(info.revocationDate)))throw httpError(400,'Apple签名交易商品、日期或标识无效');
+    if((selector.transactionId&&selector.transactionId!==info.transactionId)||(selector.productId&&selector.productId!==info.productId))throw httpError(400,'Apple签名交易与本次交易或商品不匹配');
+    const expiresAt=date(info.expiresDate),revokedAt=date(info.revocationDate);
+    const status=revokedAt?'refunded':expiresAt<=new Date()?'expired':'active';
+    return {productId:info.productId,transactionId:info.transactionId,originalTransactionId:info.originalTransactionId,latestTransactionId:info.transactionId,latestProductId:info.productId,expiresAt,purchasedAt:date(info.purchaseDate),verifiedAt:date(info.signedDate),revokedAt,environment:info.environment.toLowerCase(),status,isActive:status==='active'};
   }
-
-  // latest_receipt_info 是这个 Apple ID 下所有订阅交易，含续期。取到期最晚的那条。
-  const items = data.latest_receipt_info ?? [];
-  let best = null;
-  for (const it of items) {
-    const ms = Number(it.expires_date_ms ?? 0);
-    if (!ms) continue; // 非订阅型商品（我们目前没有）
-    if (!best || ms > Number(best.expires_date_ms)) best = it;
-  }
-  if (!best) return null;
-
-  const expiresAt = new Date(Number(best.expires_date_ms));
-  return {
-    productId: best.product_id,
-    expiresAt,
-    // originalTransactionId 在整条续期链上是稳定的——用它做 externalId，
-    // 续期时 upsert 到同一行而不是每月新增一条
-    originalTransactionId: best.original_transaction_id,
-    environment: env,
-    isActive: expiresAt.getTime() > Date.now(),
-  };
-};
-
-module.exports = { verifyAppleReceipt };
+  const secret=process.env.APPLE_SHARED_SECRET;if(!secret)throw httpError(503,'未配置Apple收据验证，请保留购买记录并联系支持');
+  let data=await post(PROD,receipt,secret),environment='production';
+  if(data.status===21007){environment='sandbox';data=await post(SANDBOX,receipt,secret);}
+  return validatedReceipt(data,environment,selector);
+}
+module.exports={verifyAppleReceipt,validatedReceipt,PRODUCTS};

@@ -20,6 +20,10 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@alicloud/dypnsapi20170525": "2.0.0",
+    "@alicloud/openapi-core": "1.0.5",
+    "@apple/app-store-server-library": "^3.1.0",
+    "@darabonba/typescript": "1.0.5",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

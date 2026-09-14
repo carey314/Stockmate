@@ -154,7 +154,7 @@ export default function ActivityFeed() {
           <Skeleton active paragraph={{ rows: 6 }} />
         ) : feed.length === 0 ? (
           <Empty
-            description={t('还没有动态，去 App 上开第一单', 'Nothing yet — create your first order in the app')}
+            description={t('还没有动态，可在订单管理手工开单或用 App 记账', 'Nothing yet — create a manual order on the Orders page or use the app')}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (

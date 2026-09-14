@@ -78,10 +78,25 @@ exports.create = async (req, res) => {
 // 更新品类基本信息
 exports.update = async (req, res) => {
   const id = Number(req.params.id);
-  const data = typeSchema.omit({ fields: true }).partial().parse(req.body);
-  const owned = await prisma.productType.findFirst({ where: { id, isDeleted: 0 } }); // 本店归属校验
-  if (!owned) throw httpError(404, '品类不存在');
-  const type = await prisma.productType.update({ where: { id }, data });
+  const payload = typeSchema.partial().parse(req.body);
+  const fields = req.body.fields === undefined ? undefined : z.array(fieldSchema).parse(req.body.fields);
+  if (fields && new Set(fields.map(f => f.key)).size !== fields.length) throw httpError(400, '字段标识不能重复');
+  const type = await require('../utils/transaction').transaction(async tx => {
+    if (!await tx.productType.findFirst({ where: { id, isDeleted: 0 } })) throw httpError(404, '品类不存在');
+    const { fields: _, ...basic } = payload;
+    await tx.productType.update({ where: { id }, data: basic });
+    if (fields) {
+      const old = await tx.fieldDefinition.findMany({ where: { productTypeId: id } });
+      for (const f of fields) {
+        const values = { ...f, options: f.options == null ? null : JSON.stringify(f.options), unit: f.unit ?? null, required: +f.required, isCore: +f.isCore, affectsStock: +f.affectsStock, showInList: +f.showInList };
+        const existing = old.find(o => o.key === f.key);
+        if (existing) await tx.fieldDefinition.update({ where: { id: existing.id }, data: values });
+        else await tx.fieldDefinition.create({ data: { ...values, productTypeId: id } });
+      }
+      await tx.fieldDefinition.deleteMany({ where: { productTypeId: id, key: { notIn: fields.map(f => f.key) } } });
+    }
+    return tx.productType.findUnique({ where: { id }, include: { fields: { orderBy: { sortOrder: 'asc' } } } });
+  });
   return ok(res, serializeType(type));
 };
 

@@ -32,7 +32,7 @@ const limiter = ({ windowMs, max, keyOf, message }) => (req, res, next) => {
   next();
 };
 
-const ip = (req) => req.headers['x-forwarded-for']?.split(',')[0].trim() || req.ip || 'unknown';
+const ip = (req) => req.ip || req.socket?.remoteAddress || 'unknown';
 const num = (name, dft) => Number(process.env[name]) || dft;
 
 // 登录/注册：防撞库。一个 IP 5 分钟 60 次——正常人输错几次密码远够用
@@ -89,4 +89,10 @@ const aiIpDayLimiter = limiter({
   message: 'AI 用得太频繁了，歇一会儿',
 });
 
-module.exports = { authLimiter, aiLimiter, globalLimiter, registerHourLimiter, registerDayLimiter, aiIpDayLimiter };
+const confirmationLimiter = limiter({ windowMs: 60_000, max: num('RATE_CONFIRM_MAX', 120), keyOf: req => `confirm:${req.user?.storeId}:${req.user?.userId}`, message: '确认请求太频繁' });
+
+const webApprovalLimiter = limiter({ windowMs: 60000, max: 30, keyOf: req => `web-approve:${req.user?.userId}`, message: '授权请求太频繁' });
+const webPollLimiter = limiter({ windowMs: 60000, max: 120, keyOf: req => `web-poll:${ip(req)}`, message: '登录状态查询太频繁' });
+const platformWriteLimiter = limiter({ windowMs: 60000, max: 30, keyOf: req => `platform-write:${req.platformAdmin?.id ?? ip(req)}`, message: '平台操作太频繁' });
+const experienceCodeLimiter = limiter({ windowMs: 60000, max: 10, keyOf: req => `experience:${req.user?.userId ?? ip(req)}`, message: '体验码尝试太频繁' });
+module.exports = { platformWriteLimiter, experienceCodeLimiter, webApprovalLimiter, webPollLimiter, confirmationLimiter, authLimiter, aiLimiter, globalLimiter, registerHourLimiter, registerDayLimiter, aiIpDayLimiter };

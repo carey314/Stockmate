@@ -26,6 +26,7 @@ model User {
   id           Int      @id @default(autoincrement())
   username     String   @unique
   passwordHash String
+  sessionVersion Int @default(0)
   realName     String
   phone        String?
   role         String   @default("staff") // admin | staff
@@ -37,6 +38,7 @@ model User {
   orders           Order[]
   purchaseOrders   PurchaseOrder[]
   identities       AuthIdentity[]
+  phoneIdentity    PhoneIdentity?
 
   @@index([storeId])
 }
@@ -285,6 +287,7 @@ model Order {
   discountRate      Float? // 折扣率（如 95 = 95折，null=无）
   discountAmount    Float     @default(0) // 折扣金额
   actualAmount      Float     @default(0) // 实付应收 = total - discount
+  originalAmount    Float? // 成交时应收；历史null不伪造
   paidAmount        Float     @default(0) // 已收款
   settlementAccount String? // 结算账户：现金/微信/支付宝/银行卡/挂账
   notes             String?
@@ -321,6 +324,9 @@ model OrderItem {
   /// 上个月明明赚了钱，这个月供应商涨价，报表里上个月就变亏了。
   /// null = 当时确实没有成本数据（报表要如实标出，不能当 0 混进毛利）
   costSnapshot Float?
+  costAmountCents Int?
+  netAmountCents Int?
+  stockSnapshot String? // 成交时实际扣减SKU/总量/成本，JSON
   subtotal    Float
 
   order   Order   @relation(fields: [orderId], references: [id])
@@ -344,6 +350,7 @@ model PurchaseOrder {
   discountRate      Float?
   discountAmount    Float     @default(0)
   actualAmount      Float     @default(0) // 实付应付
+  originalAmount    Float?
   paidAmount        Float     @default(0) // 已付款（未付=actual-paid，即欠供应商）
   settlementAccount String?
   notes             String?
@@ -375,6 +382,7 @@ model PurchaseOrderItem {
   returnedQty     Float   @default(0) // 已退给供应商的数量
   unitPrice       Float // 进价
   subtotal        Float
+  netAmountCents   Int?
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
   sku           Sku           @relation(fields: [skuId], references: [id])
@@ -385,6 +393,39 @@ model PurchaseOrderItem {
 }
 
 /// 盘点单：一次盘点提交即完成，盘盈亏差异直接落库存并留出入库流水
+model TradeEvent {
+  id           Int @id @default(autoincrement())
+  storeId      Int
+  documentType String // sale | purchase
+  documentId   Int
+  itemId       Int
+  kind         String // sale/purchase/return/cancel
+  occurredAt   DateTime @default(now())
+  productId    Int
+  skuId        Int?
+  productName  String
+  specText     String?
+  partnerId    Int?
+  operatorId   Int // 原开单人
+  actorId      Int // 经办人
+  quantity     Float
+  netAmount    Float
+  costAmount   Float?
+  @@index([storeId, documentType, occurredAt])
+  @@index([storeId, documentType, documentId])
+}
+
+model EntryConfirmation {
+  id          Int @id @default(autoincrement())
+  storeId     Int
+  requestKey  String
+  actorId     Int
+  contentHash String
+  response    String
+  createdAt   DateTime @default(now())
+  @@unique([storeId, requestKey])
+}
+
 model Stocktake {
   storeId Int @default(1) // 租户隔离：所有查询经 prisma 扩展层自动按店过滤
   id            Int      @id @default(autoincrement())
@@ -529,6 +570,12 @@ model Entitlement {
   plan       String // free | pro（档位名，不含价格——定价是渠道的事）
   source     String // apple | web | android | manual（manual=人工发放/内测/补偿）
   status     String    @default("active") // active | expired | refunded | canceled
+  appleTransactionId String?
+  appleProductId String?
+  appleEnvironment String?
+  applePurchaseAt DateTime?
+  appleVerifiedAt DateTime?
+  appleRevokedAt DateTime?
   externalId String? // 渠道侧的凭证标识：苹果 originalTransactionId / 官网订单号
   startedAt  DateTime  @default(now())
   expiresAt  DateTime? // null = 永久（人工发放的内测权益）
@@ -552,4 +599,221 @@ model AiUsage {
 
   @@unique([storeId, day, endpoint])
   @@index([storeId, day])
+}
+
+
+model WebLoginChallenge {
+ sessionVersion Int @default(0)
+ id String @id @default(uuid())
+ userId Int
+ storeId Int
+ nonceHash String
+ expiresAt DateTime
+ usedAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([userId, expiresAt])
+}
+model WebLoginCode {
+ sessionVersion Int @default(0)
+ id String @id @default(uuid())
+ userId Int
+ storeId Int
+ appleSub String
+ codeHash String @unique
+ expiresAt DateTime
+ usedAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([userId, expiresAt])
+}
+model AppleNotification {
+ id String @id
+ type String
+ originalTransactionId String?
+ state String?
+ signedAt DateTime
+ processedAt DateTime @default(now())
+ @@index([originalTransactionId, signedAt])
+}
+
+/// Verified authentication identity, never inferred from editable User.phone.
+model PhoneIdentity {
+ id String @id @default(uuid())
+ userId Int @unique
+ phone String @unique
+ verifiedAt DateTime @default(now())
+ user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+/// Globally scoped security data; all actor/store constraints explicit in SMS service.
+model SmsChallenge {
+ id String @id @default(uuid())
+ phone String
+ purpose String
+ userId Int?
+ storeId Int?
+ sessionVersion Int?
+ identityId String?
+ state String
+ attempts Int @default(0)
+ registrationHash String? @unique
+ expiresAt DateTime
+ createdAt DateTime @default(now())
+ @@index([phone, purpose])
+ @@index([userId])
+ @@index([expiresAt])
+}
+model SmsReauth {
+ id String @id @default(uuid())
+ userId Int
+ storeId Int
+ sessionVersion Int
+ nonceHash String
+ verifiedAt DateTime?
+ usedAt DateTime?
+ attempts Int @default(0)
+ expiresAt DateTime
+ @@index([userId])
+ @@index([expiresAt])
+}
+/// SHA-256 scoped subject keys only. Daily counters; expired rows purged on SMS sends.
+model SmsRateBucket {
+ key String @id
+ count Int @default(0)
+ nextAt DateTime
+ expiresAt DateTime
+ @@index([expiresAt])
+}
+
+/// Apple sign-in challenge and explicit-registration result, never an app session.
+model AppleAuthAttempt {
+ id String @id @default(uuid())
+ nonceHash String
+ expiresAt DateTime
+ state String @default("pending")
+ tokenHash String?
+ appleSub String?
+ registrationHash String? @unique
+ registrationExpiresAt DateTime?
+ userId Int?
+ storeId Int?
+ sessionVersion Int?
+ storeName String?
+ createdStore Boolean @default(false)
+ createdAt DateTime @default(now())
+ @@index([expiresAt])
+ @@index([registrationExpiresAt])
+ @@index([userId])
+ @@index([appleSub])
+}
+
+/// Browser and App hold separate secrets; this grant never elevates shop permissions.
+model WebAccessGrant {
+ id String @id @default(uuid())
+ kind String
+ state String @default("pending")
+ scanHash String?
+ browserHash String?
+ codeHash String? @unique
+ userId Int?
+ storeId Int?
+ sessionVersion Int?
+ browserLabel String
+ expiresAt DateTime
+ createdAt DateTime @default(now())
+ @@index([expiresAt])
+ @@index([userId])
+}
+
+// Platform identities are deliberately separate from tenant User/admin.
+model PlatformAdmin {
+ id Int @id @default(autoincrement())
+ username String @unique
+ passwordHash String
+ displayName String
+ status Int @default(1)
+ sessionVersion Int @default(0)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model PlatformAudit {
+ id String @id @default(uuid())
+ adminId Int?
+ actorUserId Int?
+ action String
+ targetId String?
+ storeId Int?
+ reason String?
+ metadata String?
+ createdAt DateTime @default(now())
+ @@index([createdAt])
+ @@index([adminId, createdAt])
+ @@index([storeId, createdAt])
+}
+model PromoBatch {
+ id String @id @default(uuid())
+ adminId Int
+ requestId String
+ contentHash String
+ label String
+ count Int
+ redeemExpiresAt DateTime?
+ sealedCodes String
+ createdAt DateTime @default(now())
+ @@unique([adminId, requestId])
+ @@index([createdAt])
+}
+model PromoCode {
+ id String @id @default(uuid())
+ batchId String
+ codeHash String @unique
+ codeHint String
+ state String @default("unused")
+ redeemExpiresAt DateTime?
+ storeId Int?
+ userId Int?
+ entitlementId Int? @unique
+ redeemedAt DateTime?
+ revokedAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([batchId])
+ @@index([storeId])
+ @@index([state, createdAt])
+}
+model AiRequestRecord {
+ id String @id @default(uuid())
+ requestId String
+ userId Int
+ storeId Int
+ endpoint String
+ model String
+ attempt Int
+ status String
+ durationMs Int
+ promptTokens Int?
+ completionTokens Int?
+ cacheHitTokens Int?
+ cacheMissTokens Int?
+ totalTokens Int?
+ estimatedCost Float?
+ currency String?
+ pricingSnapshot String?
+ errorCode String?
+ createdAt DateTime @default(now())
+ @@index([storeId, createdAt])
+ @@index([userId, createdAt])
+ @@index([createdAt])
+ @@index([requestId])
+}
+model PlatformEvent {
+ id String @id @default(uuid())
+ eventKey String @unique
+ userId Int?
+ storeId Int
+ kind String
+ source String
+ metadata String?
+ occurredAt DateTime @default(now())
+ createdAt DateTime @default(now())
+ @@index([storeId, occurredAt])
+ @@index([userId, occurredAt])
+ @@index([kind, occurredAt])
 }

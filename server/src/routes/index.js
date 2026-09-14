@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { auth, adminOnly } = require('../middlewares/auth');
-const { authLimiter, aiLimiter, registerHourLimiter, registerDayLimiter, aiIpDayLimiter } = require('../middlewares/rateLimit');
+const { confirmationLimiter, authLimiter, aiLimiter, registerHourLimiter, registerDayLimiter, aiIpDayLimiter } = require('../middlewares/rateLimit');
 const { aiMeter } = require('../middlewares/aiMeter');
 const { wrap } = require('../utils/response');
 
@@ -15,6 +15,7 @@ const systemCtl = require('../controllers/system');
 const stocktakesCtl = require('../controllers/stocktakes');
 const poCtl = require('../controllers/purchaseOrders');
 const productsCtl = require('../controllers/products');
+const standardImportCtl = require('../controllers/standardImport');
 const inventoryCtl = require('../controllers/inventory');
 const customersCtl = require('../controllers/customers');
 const pricingCtl = require('../controllers/pricing');
@@ -23,6 +24,26 @@ const statsCtl = require('../controllers/stats');
 const reportsCtl = require('../controllers/reports');
 
 const r = Router();
+
+const { platformAuth } = require('../middlewares/platformAuth');
+const platformAuthCtl = require('../controllers/platformAuth');
+const promotionCtl = require('../controllers/promotions');
+const platformMetricsCtl = require('../controllers/platformMetrics');
+const { platformWriteLimiter, experienceCodeLimiter } = require('../middlewares/rateLimit');
+r.use('/platform', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+r.post('/platform/auth/login', authLimiter, wrap(platformAuthCtl.login));
+r.use('/platform', platformAuth);
+r.get('/platform/auth/profile', wrap(platformAuthCtl.profile));
+r.get('/platform/overview', wrap(platformMetricsCtl.overview));
+r.get('/platform/users', wrap(platformMetricsCtl.users));
+r.get('/platform/users/:id', wrap(platformMetricsCtl.userDetail));
+r.get('/platform/ai-requests', wrap(platformMetricsCtl.aiRequests));
+r.post('/platform/promo-batches', platformWriteLimiter, wrap(promotionCtl.createBatch));
+r.get('/platform/promo-codes', wrap(promotionCtl.listCodes));
+r.post('/platform/promo-codes/:id/disable', platformWriteLimiter, wrap(promotionCtl.disable));
+r.post('/platform/promo-codes/:id/revoke', platformWriteLimiter, wrap(promotionCtl.revoke));
+r.get('/platform/audit', wrap(promotionCtl.audit));
+r.post('/me/experience-code', (_req, res, next) => { res.set('Cache-Control','no-store'); next(); }, auth, experienceCodeLimiter, wrap(promotionCtl.redeem));
 
 // 图片上传（商品图）
 const multer = require('multer');
@@ -41,17 +62,50 @@ r.post('/upload', auth, upload.single('file'), (req, res) => {
 });
 
 // 认证
+const sms = require("../controllers/sms");
+r.get("/auth/sms/capabilities", wrap(sms.capabilities));
+r.post('/auth/sms/send', sms.sendAuth, wrap(sms.send));
+r.post('/auth/sms/login', wrap(sms.login));
+r.post('/auth/sms/register', wrap(sms.register));
+r.post('/auth/sms/reset-password', wrap(sms.resetPassword));
+r.post('/auth/sms/reauth/challenge', auth, authLimiter, wrap(sms.reauthChallenge));
+r.post('/auth/sms/reauth', auth, authLimiter, wrap(sms.reauth));
+r.post('/auth/sms/bind', auth, wrap(sms.bind));
 r.post('/client-logs', wrap(require('../controllers/clientLog').report)); // 崩溃上报(无需登录)
 r.post('/auth/login', authLimiter, wrap(authCtl.login));
 r.post('/auth/register', registerHourLimiter, registerDayLimiter, wrap(authCtl.register)); // 注册即登录；双窗口限流防刷号
 r.post('/auth/oauth', authLimiter, wrap(authCtl.oauthLogin)); // 平台账号登录(apple已实现/huawei/wechat待接)
+const appleAuth = require('../controllers/appleAuth');
+r.get('/auth/apple/capabilities', wrap(appleAuth.capabilities));
+r.post('/auth/apple/challenge', authLimiter, wrap(appleAuth.challenge));
+r.post('/auth/apple/verify', authLimiter, wrap(appleAuth.verify));
+r.post('/auth/apple/register', authLimiter, registerHourLimiter, registerDayLimiter, wrap(appleAuth.register));
 r.get('/auth/profile', auth, wrap(authCtl.profile));
 r.get('/me/entitlement', auth, wrap(require('../controllers/entitlement').mine)); // 当前权益+本月AI用量
 r.post('/me/entitlement/apple', auth, wrap(require('../controllers/entitlement').redeemApple)); // 苹果内购收据 → 权益
+r.post('/apple/notifications', wrap(require('../controllers/entitlement').appleNotification)); // Apple JWS验签后处理，不接受客户端声明
 r.put('/auth/profile', auth, wrap(authCtl.updateProfile)); // 改店名/手机
 r.put('/auth/password', auth, wrap(authCtl.changePassword));
 r.post('/auth/delete-account', auth, wrap(authCtl.deleteAccount)); // 删除账号(App Store 5.1.1v)
 r.get('/export/all', auth, adminOnly, wrap(authCtl.exportAll)); // 全量数据导出(仅老板)
+
+// App重新Apple认证后的一次性同店Web登录桥。
+const webBridge = require('../controllers/webBridge');
+r.post('/auth/web-bridge/challenge', auth, authLimiter, wrap(webBridge.challenge));
+r.post('/auth/web-bridge', auth, authLimiter, wrap(webBridge.issue));
+r.post('/auth/web-bridge/redeem', authLimiter, wrap(webBridge.redeem));
+const webLogin = require('../controllers/webLogin');
+const { webApprovalLimiter, webPollLimiter } = require('../middlewares/rateLimit');
+r.use('/auth/web-login', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+r.get('/auth/web-login/capabilities', wrap(webLogin.capabilities));
+r.post('/auth/web-login/challenges', authLimiter, wrap(webLogin.create));
+r.post('/auth/web-login/status', webPollLimiter, wrap(webLogin.status));
+r.post('/auth/web-login/cancel', authLimiter, wrap(webLogin.cancel));
+r.post('/auth/web-login/redeem', authLimiter, wrap(webLogin.redeem));
+r.post('/auth/web-login/scan', auth, webApprovalLimiter, wrap(webLogin.scan));
+r.post('/auth/web-login/confirm', auth, webApprovalLimiter, wrap(webLogin.confirm));
+r.post('/auth/web-login/code', auth, webApprovalLimiter, wrap(webLogin.issueCode));
+r.post('/auth/web-login/code/redeem', authLimiter, wrap(webLogin.redeemCode));
 
 // 品类 + 字段（核心差异化）
 r.get('/product-types', auth, wrap(typesCtl.list));
@@ -69,7 +123,7 @@ r.post('/ai/generate-products', auth, aiIpDayLimiter, aiLimiter, aiMeter('genera
 r.post('/ai/import-products', auth, aiIpDayLimiter, aiLimiter, aiMeter('import-products'), wrap(aiCtl.importProducts)); // 粘贴任意表格文字→商品清单草案
 r.post('/ai/ask', auth, adminOnly, aiIpDayLimiter, aiLimiter, aiMeter('ask'), wrap(aiCtl.ask)); // AI问生意(经营快照含利润/欠款,仅老板)
 r.post('/ai/parse-entry', auth, aiIpDayLimiter, aiLimiter, aiMeter('parse-entry'), wrap(aiParseCtl.parseEntry)); // 口述→结构化草案
-r.post('/ai/confirm-entry', auth, aiIpDayLimiter, aiLimiter, aiMeter('confirm-entry'), wrap(aiParseCtl.confirmEntry)); // 确认落库
+r.post('/ai/confirm-entry', auth, confirmationLimiter, wrap(aiParseCtl.confirmEntry)); // 确认落库
 
 // 收入流水（日结营业额等）
 r.get('/incomes', auth, wrap(incomesCtl.list));
@@ -85,6 +139,8 @@ r.delete('/expenses/:id', auth, wrap(expensesCtl.remove));
 r.get('/products', auth, wrap(productsCtl.list));
 r.get('/products/:id', auth, wrap(productsCtl.detail));
 r.post('/products', auth, wrap(productsCtl.create));
+r.post('/products/standard-import/validate', auth, adminOnly, wrap(standardImportCtl.validate));
+r.post('/products/standard-import/commit', auth, adminOnly, wrap(standardImportCtl.commit));
 r.post('/products/batch', auth, wrap(productsCtl.batchCreate)); // 批量建品(AI生成/粘贴导入)
 r.put('/products/:id', auth, wrap(productsCtl.update));
 r.delete('/products/:id', auth, adminOnly, wrap(productsCtl.remove));

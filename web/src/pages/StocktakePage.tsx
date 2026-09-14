@@ -12,9 +12,10 @@ import {
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { PlusOutlined } from '@ant-design/icons'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dayjs from 'dayjs'
 import api from '../api/client'
+import { fetchAllPages } from '../api/pagination'
 import { fmtQty, fmtTime } from '../lib/format'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
@@ -141,18 +142,20 @@ export default function StocktakePage() {
   const [sheetLoading, setSheetLoading] = useState(false)
   const [submitBusy, setSubmitBusy] = useState(false)
 
+  const sheetVersion = useRef(0)
   // 按范围拉在售 SKU，flatten 成行（参考 ProductsPage 的 skus 展开写法）
   const loadSheet = useCallback(
     async (scope: number | 'all') => {
+      const version = ++sheetVersion.current
       setSheetLoading(true)
+      setSheet([])
       try {
-        const data = await api.get<{ list: ProductRow[]; pagination: { total: number } }>('/products', {
-          page: 1,
-          pageSize: 500,
+        const data = await fetchAllPages<ProductRow>('/products', {
           ...(typeof scope === 'number' ? { productTypeId: scope } : {}),
         })
+        if (version !== sheetVersion.current) return
         const flat: SheetRow[] = []
-        for (const p of data.list) {
+        for (const p of data) {
           for (const s of p.skus) {
             const sys = s.inventory?.quantity ?? 0
             flat.push({
@@ -167,10 +170,11 @@ export default function StocktakePage() {
         }
         setSheet(flat)
       } catch (e) {
+        if (version !== sheetVersion.current) return
         message.error((e as Error).message)
         setSheet([])
       } finally {
-        setSheetLoading(false)
+        if (version === sheetVersion.current) setSheetLoading(false)
       }
     },
     [message],
@@ -194,6 +198,7 @@ export default function StocktakePage() {
   }
 
   const submit = async () => {
+    if (sheetLoading) return message.warning(t('商品尚未完整加载', 'Products are still loading'))
     if (sheet.length === 0) return message.warning(t('该范围没有可盘点的规格', 'No SKUs to count in this scope'))
     setSubmitBusy(true)
     try {

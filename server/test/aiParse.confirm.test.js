@@ -52,7 +52,7 @@ after(async () => {
 });
 
 describe('口述记账确认落库 · 进货', () => {
-  test('进货入库并留一条含花费的入库流水', async () => {
+  test('进货入库并关联真实采购单与付款流水', async () => {
     await runWithTenant(STORE, async () => {
       const { product, sku } = await newProduct({ price: 10, costPrice: 6, quantity: 20 });
       const r = await callConfirm({
@@ -66,7 +66,10 @@ describe('口述记账确认落库 · 进货', () => {
       });
       assert.equal(rec.beforeQuantity, 20);
       assert.equal(rec.afterQuantity, 30);
-      assert.match(rec.reason, /口述记账·进货（花费¥35）/);
+      assert.match(rec.reason, /进货单 PO/);
+      const po = await prisma.purchaseOrder.findUnique({ where: { id: rec.relatedPurchaseOrderId } });
+      assert.equal(po.actualAmount,35);
+      assert.equal((await prisma.paymentRecord.findFirst({where:{purchaseOrderId:po.id}})).amount,35);
     });
   });
 
@@ -81,7 +84,7 @@ describe('口述记账确认落库 · 进货', () => {
   test('进货数量小数照收（散称半斤），不静默取整', async () => {
     await runWithTenant(STORE, async () => {
       const { product, sku } = await newProduct({ price: 10, quantity: 0 });
-      await callConfirm({ purchases: [{ productId: product.id, name: '货', quantity: 0.5 }] });
+      await callConfirm({ purchases: [{ productId: product.id, name: '货', quantity: 0.5, unitCost: 6 }] });
       assert.equal((await prisma.inventory.findUnique({ where: { skuId: sku.id } })).quantity, 0.5);
     });
   });
@@ -179,10 +182,11 @@ describe('全链路：口述没说进价，绝不能把商品成本抹成 0', ()
       const cleaned = sanitizeParseEntry(aiRaw);
       assert.equal(cleaned.purchases[0].unitCost, null, '"不知道"必须还是"不知道"');
 
-      // 第二步：这份草案原样进确认卡，用户点确认就落库
-      await callConfirm({
+      // 第二步：缺少真实进价不能生成采购账，返回400且保留库存/成本。
+      await assert.rejects(() => callConfirm({
         purchases: [{ productId: product.id, name: '货', quantity: cleaned.purchases[0].quantity, unitCost: cleaned.purchases[0].unitCost }],
-      });
+      }), e => e.status === 400);
+      assert.equal((await prisma.inventory.findUnique({where:{skuId:sku.id}})).quantity,0);
 
       // 原本 ¥6 的进价必须纹丝不动
       assert.equal((await prisma.sku.findUnique({ where: { id: sku.id } })).costPrice, 6);
@@ -207,12 +211,12 @@ describe('全链路：口述没说进价，绝不能把商品成本抹成 0', ()
       const { product, sku } = await newProduct({ price: 10, costPrice: 6, quantity: 0 });
       const cleaned = sanitizeParseEntry({ purchases: [{ name: '货', quantity: 10 }] });
       assert.equal(cleaned.purchases[0].unitCost, null);
-      await callConfirm({ purchases: [{ productId: product.id, name: '货', quantity: 10, unitCost: null }] });
+      await assert.rejects(() => callConfirm({ purchases: [{ productId: product.id, name: '货', quantity: 10, unitCost: null }] }), e => e.status === 400);
       assert.equal((await prisma.sku.findUnique({ where: { id: sku.id } })).costPrice, 6, '原进价不该被动');
     });
   });
 
-  test('新建商品路径同样中招：0 成本直接写进新商品档案', async () => {
+  test('用户明确0元进货可以建档，区别于null未知', async () => {
     await runWithTenant(STORE, async () => {
       const r = await callConfirm({
         purchases: [
@@ -220,7 +224,7 @@ describe('全链路：口述没说进价，绝不能把商品成本抹成 0', ()
         ],
       });
       const p = await prisma.product.findUnique({ where: { id: r.data.inbounded[0].productId } });
-      assert.equal(p.costPrice, 0, '本该是 null=未知，落成了 0=白拿的');
+      assert.equal(p.costPrice, 0, '明确0元与缺价不同');
     });
   });
 });

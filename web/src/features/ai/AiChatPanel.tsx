@@ -2,6 +2,9 @@ import { App, Button, Typography } from 'antd'
 import { ClearOutlined, SendOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import api from '../../api/client'
+import { SS } from '../../lib/storage'
+import { useAuth } from '../../auth'
+import { sessionSnapshot, isCurrentSession } from '../../lib/session'
 import { T } from '../../theme'
 import { t } from '../../lib/i18n'
 import { AiQuotaTag, handleAiQuotaError } from '../../components/AiQuota'
@@ -13,16 +16,17 @@ interface Msg {
   status?: 'loading' | 'error'
 }
 
-const STORE_KEY = 'sm_ai_chat' // sessionStorage 镜像：窄屏 Drawer 卸载重挂时聊天不丢
+// 只恢复明确属于当前店铺/账号的缓存，旧版无身份缓存直接清理。
 const QUICK = [
   t('今天卖了多少', 'How much did I sell today'),
   t('谁欠我钱', 'Who owes me money'),
   t('什么货该补了', 'What needs restocking'),
 ]
 
-function loadMsgs(): Msg[] {
+function loadMsgs(storeKey: string): Msg[] {
+  sessionStorage.removeItem(SS.legacyChat)
   try {
-    const raw = sessionStorage.getItem(STORE_KEY)
+    const raw = sessionStorage.getItem(storeKey)
     const arr = raw ? (JSON.parse(raw) as Msg[]) : []
     return arr.filter((m) => m.status !== 'loading') // 挂起中的占位不恢复
   } catch {
@@ -31,21 +35,33 @@ function loadMsgs(): Msg[] {
 }
 
 export default function AiChatPanel() {
+  const { user, profile } = useAuth()
+  const key = `${SS.chatPrefix}${profile?.storeId ?? 'account'}:${user?.id ?? 'none'}`
+  if (!user) return null
+  return <IdentityChat key={`${key}:${sessionSnapshot().revision}`} storeKey={key} />
+}
+
+function IdentityChat({ storeKey }: { storeKey: string }) {
   const { modal } = App.useApp()
-  const [msgs, setMsgs] = useState<Msg[]>(loadMsgs)
+  const [msgs, setMsgs] = useState<Msg[]>(() => loadMsgs(storeKey))
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const lastQuestion = useRef<string>('')
+  const requestVersion = useRef(0)
+  useEffect(() => () => { requestVersion.current++ }, [])
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    sessionStorage.setItem(STORE_KEY, JSON.stringify(msgs))
+    sessionStorage.setItem(storeKey, JSON.stringify(msgs))
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
-  }, [msgs])
+  }, [msgs, storeKey])
 
   const send = async (q: string) => {
     const question = q.trim()
     if (question.length < 2 || busy) return
+    const snapshot = sessionSnapshot()
+    const version = ++requestVersion.current
+    const current = () => version === requestVersion.current && isCurrentSession(snapshot)
     lastQuestion.current = question
     setBusy(true)
     setInput('')
@@ -57,9 +73,11 @@ export default function AiChatPanel() {
     setMsgs((p) => [...p, { role: 'user', content: question }, { role: 'assistant', content: '', status: 'loading' }])
     try {
       const data = await api.post<{ answer: string }>('/ai/ask', { question, history })
+      if (!current()) return
       refreshEntitlement()
       setMsgs((p) => [...p.slice(0, -1), { role: 'assistant', content: data.answer }])
     } catch (e) {
+      if (!current()) return
       handleAiQuotaError(e, modal, true)
       const raw = (e as Error).message
       const friendly = raw.includes('timeout')
@@ -67,7 +85,7 @@ export default function AiChatPanel() {
         : raw
       setMsgs((p) => [...p.slice(0, -1), { role: 'assistant', content: friendly, status: 'error' }])
     } finally {
-      setBusy(false)
+      if (current()) setBusy(false)
     }
   }
 
@@ -94,7 +112,7 @@ export default function AiChatPanel() {
             type="text"
             icon={<ClearOutlined />}
             title={t('清空对话', 'Clear conversation')}
-            onClick={() => setMsgs([])}
+            onClick={() => { requestVersion.current++; setMsgs([]); setBusy(false) }}
           />
         )}
       </div>

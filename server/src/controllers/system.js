@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const { clearGrants } = require('../services/session');
 const { z } = require('zod');
 const prisma = require('../config/prisma');
 const { getTenantId, basePrisma } = require('../config/prisma');
@@ -26,15 +27,15 @@ exports.createStaff = async (req, res) => {
   const data = staffSchema.parse(req.body);
   const exists = await basePrisma.user.findFirst({ where: { username: data.username }, select: { id: true } }); // 用户名全局唯一，占用检查查全局
   if (exists) return fail(res, 409, `用户名「${data.username}」已被占用`);
-  const user = await prisma.user.create({
-    data: {
-      username: data.username,
-      passwordHash: await bcrypt.hash(data.password, 10),
-      realName: data.realName,
-      phone: data.phone ?? null,
-      role: 'staff',
-    },
-    select: { id: true, username: true, realName: true, role: true, status: true },
+  const passwordHash = await bcrypt.hash(data.password, 10);
+  const user = await prisma.$transaction(async tx => {
+    const row = await tx.user.create({
+      data: { username: data.username, passwordHash, realName: data.realName, phone: data.phone ?? null, role: 'staff' },
+      select: { id: true, storeId: true, createdAt: true, username: true, realName: true, role: true, status: true },
+    });
+    await require('../services/metricsContext').recordRegistration(tx,row,'staff');
+    const { storeId, createdAt, ...publicUser } = row;
+    return publicUser;
   });
   return created(res, user, '员工已创建');
 };
@@ -45,10 +46,11 @@ exports.toggleUser = async (req, res) => {
   if (id === req.user.userId) return fail(res, 400, '不能停用自己');
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw httpError(404, '用户不存在');
-  const updated = await prisma.user.update({
-    where: { id },
-    data: { status: user.status === 1 ? 0 : 1 },
-    select: { id: true, username: true, realName: true, status: true },
+  const updated = await basePrisma.$transaction(async tx => {
+    const changed = await tx.user.updateMany({ where: { id, storeId: req.user.storeId, status: user.status, sessionVersion: user.sessionVersion }, data: { status: user.status === 1 ? 0 : 1, sessionVersion: { increment: 1 } } });
+    if (changed.count !== 1) throw httpError(409, '员工状态已变化，请刷新后重试');
+    await clearGrants(tx, [id]);
+    return tx.user.findUnique({ where: { id }, select: { id: true, username: true, realName: true, status: true } });
   });
   return ok(res, updated, updated.status === 1 ? '已启用' : '已停用');
 };
@@ -59,7 +61,12 @@ exports.resetPassword = async (req, res) => {
   const { password } = z.object({ password: z.string().min(6, '密码至少6位') }).parse(req.body);
   const owned = await prisma.user.findFirst({ where: { id } }); // 本店归属校验（跨店改密=账号接管，高危）
   if (!owned) throw httpError(404, '用户不存在');
-  await prisma.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(password, 10) } });
+  const passwordHash = await bcrypt.hash(password, 10);
+  await basePrisma.$transaction(async tx => {
+    const changed = await tx.user.updateMany({ where: { id, storeId: req.user.storeId, sessionVersion: owned.sessionVersion }, data: { passwordHash, sessionVersion: { increment: 1 } } });
+    if (changed.count !== 1) throw httpError(409, '员工身份已变化，请刷新后重试');
+    await clearGrants(tx, [id]);
+  });
   return ok(res, null, '密码已重置');
 };
 

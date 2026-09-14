@@ -6,11 +6,24 @@ import api from '../api/client'
 import { useAuth } from '../auth'
 import EChart from '../components/EChart'
 import { fmtMoney, fmtQty } from '../lib/format'
+import { profitText, reliableProfit } from '../lib/profitQuality'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
+interface ReportQuality {
+  historyIncomplete?: boolean
+  profitUnreliable?: boolean
+}
+function QualityNote({ historyIncomplete, profitUnreliable }: ReportQuality) {
+  if (!historyIncomplete && !profitUnreliable) return null
+  return <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={[
+    historyIncomplete && t('历史记录不完整，请核对历史单据；本期统计可能不完整。', 'Historical records are incomplete. Review past documents; period totals may be incomplete.'),
+    profitUnreliable && t('成本缺失，利润仅供估算；暂无法准确计算。', 'Cost records are missing. Profit is only an estimate and cannot yet be calculated accurately.'),
+  ].filter(Boolean).join(' ')} />
+}
+
 // ===== 接口形状（对齐 reports.js）=====
-interface ProfitRep {
+interface ProfitRep extends ReportQuality {
   sales: number
   cogs: number
   expenses: number
@@ -19,8 +32,8 @@ interface ProfitRep {
   orderCount: number
   byDay: { date: string; sales: number; profit: number }[]
 }
-interface SalesRep {
-  list: { productName: string; specText: string | null; qty: number; amount: number; profit: number }[]
+interface SalesRep extends ReportQuality {
+  list: { productName: string; specText: string | null; qty: number; amount: number; profit: number; profitUnreliable?: boolean }[]
   totalAmount: number
 }
 interface InvRep {
@@ -36,10 +49,10 @@ interface CashRep {
   net: number
   rows: { at: string; type: string; amount: number; note: string | null; account: string | null }[]
 }
-interface StaffRep {
-  list: { name: string; orders: number; sales: number; profit: number }[]
+interface StaffRep extends ReportQuality {
+  list: { name: string; orders: number; sales: number; profit: number; profitUnreliable?: boolean }[]
 }
-interface PurchaseRep {
+interface PurchaseRep extends ReportQuality {
   total: number
   orderCount: number
   byProduct: { name: string; qty: number; amount: number }[]
@@ -88,17 +101,17 @@ function useReport<T>(url: string, params: object | null) {
   return { data, error }
 }
 
-function Body<T>({ data, error, children }: { data: T | null; error: string | null; children: (d: T) => React.ReactNode }) {
+function Body<T>({ data, error, quality, children }: { data: T | null; error: string | null; quality?: (d: T) => ReportQuality; children: (d: T) => React.ReactNode }) {
   if (error) return <Alert type="warning" message={error} showIcon />
   if (!data) return <Skeleton active paragraph={{ rows: 4 }} />
-  return <>{children(data)}</>
+  return <>{quality && <QualityNote {...quality(data)} />}{children(data)}</>
 }
 
-const stat = (title: string, value: number, money = true, color?: string) => (
+const stat = (title: string, value: number | string, money = true, color?: string) => (
   <Statistic
     title={title}
-    value={money ? fmtMoney(value) : value}
-    styles={{ content: { fontSize: 22, fontWeight: 700, ...(color ? { color } : {}) } }}
+    value={typeof value === 'number' && money ? fmtMoney(value) : value}
+    styles={{ content: { fontSize: typeof value === 'string' ? 16 : 22, fontWeight: 700, ...(color ? { color } : {}) } }}
   />
 )
 
@@ -174,14 +187,14 @@ export default function ReportsPage() {
       {/* 经营利润（仅老板）*/}
       {isAdmin && (
         <Card title={t('经营利润', 'Profit')}>
-          <Body data={profit.data} error={profit.error}>
+          <Body data={profit.data} error={profit.error} quality={(d) => d}>
             {(d) => (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 16, marginBottom: 12 }}>
                   {stat(t('销售额', 'Revenue'), d.sales)}
-                  {stat(t('销货成本', 'Cost of goods sold'), d.cogs)}
+                  {stat(d.profitUnreliable ? t('已知销货成本', 'Known cost of goods sold') : t('销货成本', 'Cost of goods sold'), d.cogs)}
                   {stat(t('经营支出', 'Operating expenses'), d.expenses)}
-                  {stat(t('利润', 'Profit'), d.profit, true, d.profit >= 0 ? T.emerald : T.error)}
+                  {stat(t('利润', 'Profit'), !reliableProfit(d.profit, d) ? profitText(d.profit, d) : d.profit, true, !reliableProfit(d.profit, d) ? T.secondary : d.profit >= 0 ? T.emerald : T.error)}
                   {d.lossAmount > 0 && stat(t('损耗（报损/过期）', 'Loss (damaged / expired)'), d.lossAmount, true, T.orange)}
                   {stat(t('订单数', 'Orders'), d.orderCount, false)}
                 </div>
@@ -207,7 +220,7 @@ export default function ReportsPage() {
                       },
                       series: [
                         { name: t('销售额', 'Revenue'), type: 'line', smooth: 0.4, showSymbol: false, data: d.byDay.map((x) => x.sales), lineStyle: { width: 3, color: T.primary }, itemStyle: { color: T.primary } },
-                        { name: t('利润', 'Profit'), type: 'line', smooth: 0.4, showSymbol: false, data: d.byDay.map((x) => x.profit), lineStyle: { width: 2, color: T.emerald }, itemStyle: { color: T.emerald } },
+                        ...(reliableProfit(d.profit, d) && d.byDay.every(day => reliableProfit(day.profit, d)) ? [{ name: t('利润', 'Profit'), type: 'line', smooth: 0.4, showSymbol: false, data: d.byDay.map((x) => x.profit), lineStyle: { width: 2, color: T.emerald }, itemStyle: { color: T.emerald } }] : []),
                       ],
                     }}
                   />
@@ -220,7 +233,7 @@ export default function ReportsPage() {
 
       {/* 销售按商品 */}
       <Card title={t('销售统计（按商品）', 'Sales by product')}>
-        <Body data={sales.data} error={sales.error}>
+        <Body data={sales.data} error={sales.error} quality={(d) => ({ ...d, profitUnreliable: d.list.some((row) => row.profitUnreliable) })}>
           {(d) =>
             d.list.length === 0 ? (
               <Typography.Text type="secondary">{t('这段时间没有销售记录', 'No sales in this period')}</Typography.Text>
@@ -261,7 +274,7 @@ export default function ReportsPage() {
                     { title: t('数量', 'Qty'), dataIndex: 'qty', width: 70, render: (v) => fmtQty(v) },
                     { title: t('金额', 'Amount'), dataIndex: 'amount', width: 90, render: (v) => fmtMoney(v) },
                     ...(isAdmin
-                      ? [{ title: t('毛利', 'Gross profit'), dataIndex: 'profit', width: 90, render: (v: number) => fmtMoney(v) }]
+                      ? [{ title: t('毛利', 'Gross profit'), dataIndex: 'profit', width: 90, render: (v: number, row: SalesRep['list'][number]) => profitText(v, { historyIncomplete: d.historyIncomplete, profitUnreliable: row.profitUnreliable }) }]
                       : []),
                   ]}
                   footer={() => t(`合计 ${fmtMoney(d.totalAmount)}`, `Total ${fmtMoney(d.totalAmount)}`)}
@@ -328,7 +341,7 @@ export default function ReportsPage() {
 
       {/* 进货统计 */}
       <Card title={t('进货统计', 'Purchase stats')}>
-        <Body data={purchase.data} error={purchase.error}>
+        <Body data={purchase.data} error={purchase.error} quality={(d) => d}>
           {(d) =>
             d.orderCount === 0 ? (
               <Typography.Text type="secondary">{t('这段时间没有进货', 'No purchases in this period')}</Typography.Text>
@@ -422,7 +435,7 @@ export default function ReportsPage() {
       {/* 员工业绩（仅老板）*/}
       {isAdmin && (
         <Card title={t('员工业绩', 'Staff performance')}>
-          <Body data={staff.data} error={staff.error}>
+          <Body data={staff.data} error={staff.error} quality={(d) => ({ ...d, profitUnreliable: d.list.some((row) => row.profitUnreliable) })}>
             {(d) => (
               <Table
                 size="small"
@@ -434,7 +447,7 @@ export default function ReportsPage() {
                   { title: t('员工', 'Staff'), dataIndex: 'name' },
                   { title: t('订单数', 'Orders'), dataIndex: 'orders', width: 90 },
                   { title: t('销售额', 'Revenue'), dataIndex: 'sales', width: 110, render: (v) => fmtMoney(v) },
-                  { title: t('毛利', 'Gross profit'), dataIndex: 'profit', width: 110, render: (v) => fmtMoney(v) },
+                  { title: t('毛利', 'Gross profit'), dataIndex: 'profit', width: 110, render: (v, row) => profitText(v, { historyIncomplete: d.historyIncomplete, profitUnreliable: row.profitUnreliable }) },
                 ]}
               />
             )}

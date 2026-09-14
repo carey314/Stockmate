@@ -1,4 +1,4 @@
-import { Empty, Skeleton, Tag, Typography } from 'antd'
+import { Alert, Button, Empty, Skeleton, Tag, Typography } from 'antd'
 import {
   AccountBookOutlined,
   InboxOutlined,
@@ -10,16 +10,19 @@ import {
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import { fetchAllPages } from '../api/pagination'
 import { useAuth } from '../auth'
 import { fmtMoney, fmtQty } from '../lib/format'
+import { profitProblem, profitText } from '../lib/profitQuality'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
 
 interface Overview {
   todaySales: number
   todayOrderCount: number
-  todayProfit: number
-  profitUnreliable: boolean
+  todayProfit?: number | null
+  profitUnreliable?: boolean
+  historyIncomplete?: boolean
   lowStockCount: number
 }
 interface AlertRow {
@@ -99,18 +102,26 @@ export default function TodoPage() {
   const [owedCustomers, setOwedCustomers] = useState<Party[] | null>(null)
   const [owedSuppliers, setOwedSuppliers] = useState<Party[] | null>(null)
 
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
   useEffect(() => {
-    api.get<Overview>('/stats/overview').then(setOv).catch(() => setOv(null))
-    api.get<AlertRow[]>('/inventory/alerts').then(setAlerts).catch(() => setAlerts([]))
-    api
-      .get<{ list: Party[] }>('/customers', { pageSize: 200 })
-      .then((d) => setOwedCustomers(d.list.filter((c) => (c.owed ?? 0) > 0).sort((a, b) => (b.owed ?? 0) - (a.owed ?? 0))))
-      .catch(() => setOwedCustomers([]))
-    api
-      .get<{ list: Party[] }>('/suppliers', { pageSize: 200 })
-      .then((d) => setOwedSuppliers(d.list.filter((s) => (s.owed ?? 0) > 0).sort((a, b) => (b.owed ?? 0) - (a.owed ?? 0))))
-      .catch(() => setOwedSuppliers([]))
-  }, [])
+    let alive = true
+    setLoadError(null)
+    Promise.all([
+      api.get<Overview>('/stats/overview'),
+      api.get<AlertRow[]>('/inventory/alerts'),
+      fetchAllPages<Party>('/customers'),
+      fetchAllPages<Party>('/suppliers'),
+    ]).then(([overview, stock, customers, suppliers]) => {
+      if (!alive) return
+      setOv(overview)
+      setAlerts(stock)
+      setOwedCustomers(customers.filter((c) => (c.owed ?? 0) > 0).sort((a,b) => (b.owed ?? 0) - (a.owed ?? 0)))
+      setOwedSuppliers(suppliers.filter((c) => (c.owed ?? 0) > 0).sort((a,b) => (b.owed ?? 0) - (a.owed ?? 0)))
+    }).catch((e) => { if (alive) setLoadError((e as Error).message) })
+    return () => { alive = false }
+  }, [retry])
+  if (loadError) return <Alert type="error" showIcon message={loadError} action={<Button onClick={() => setRetry((n) => n + 1)}>重试</Button>} />
 
   const totalCustomerOwed = (owedCustomers ?? []).reduce((s, c) => s + (c.owed ?? 0), 0)
   const totalSupplierOwed = (owedSuppliers ?? []).reduce((s, c) => s + (c.owed ?? 0), 0)
@@ -131,14 +142,15 @@ export default function TodoPage() {
             {isAdmin && (
               <Stat
                 icon={<RiseOutlined />}
-                label={ov.profitUnreliable ? t('今日毛利*', "Today's gross profit*") : t('今日毛利', "Today's gross profit")}
-                value={fmtMoney(ov.todayProfit)}
+                label={t('今日经营利润', "Today's operating profit")}
+                value={profitText(ov.todayProfit, ov)}
               />
             )}
           </div>
         ) : (
           <Skeleton active paragraph={{ rows: 1 }} />
         )}
+        {isAdmin && ov && <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>{profitProblem(ov.todayProfit, ov) || t('已扣除销货成本和经营支出。', 'After cost of goods sold and operating expenses.')}</Typography.Paragraph>}
       </Card>
 
       {/* 缺货补货 */}

@@ -1,5 +1,6 @@
 import {
   App,
+  Alert,
   Button,
   Empty,
   Form,
@@ -15,10 +16,11 @@ import {
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import api from '../api/client'
+import { fetchAllPages } from '../api/pagination'
 import { fmtMoney, fmtQty } from '../lib/format'
 import { t } from '../lib/i18n'
 import { T, cardStyle } from '../theme'
@@ -79,6 +81,8 @@ export default function PartnersPage() {
   const [keyword, setKeyword] = useState(() => searchParams.get('kw') ?? '') // Cmd+K 跳转带 ?kw=
   const [rows, setRows] = useState<Partner[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const loadVersion = useRef(0)
   const [types, setTypes] = useState<ProductType[]>([])
 
   const isCustomer = mode === 'customer'
@@ -91,25 +95,30 @@ export default function PartnersPage() {
   }, [])
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current
     setLoading(true)
+    setLoadError(null)
+    setRows([])
     try {
-      const data = await api.get<{ list: Partner[] }>(isCustomer ? '/customers' : '/suppliers', {
-        page: 1,
-        pageSize: 200,
+      const data = await fetchAllPages<Partner>(isCustomer ? '/customers' : '/suppliers', {
         ...(keyword ? { keyword } : {}),
       })
       // 客户和供应商都按欠款降序（催账/该付款的排前面）
-      const list = [...data.list].sort((a, b) => (b.owed ?? 0) - (a.owed ?? 0))
+      if (version !== loadVersion.current) return
+      const list = [...data].sort((a, b) => (b.owed ?? 0) - (a.owed ?? 0))
       setRows(list)
     } catch (e) {
-      message.error((e as Error).message)
+      if (version === loadVersion.current) setLoadError((e as Error).message)
     } finally {
-      setLoading(false)
+      if (version === loadVersion.current) setLoading(false)
     }
-  }, [isCustomer, keyword, message])
+  }, [isCustomer, keyword])
 
   useEffect(() => {
     load()
+    // This ref is a request sequence, not a DOM node: invalidate all pending results on cleanup.
+    const invalidate = () => { loadVersion.current++ }
+    return invalidate
   }, [load])
 
   const totalOwed = rows.reduce((s, r) => s + (r.owed ?? 0), 0)
@@ -167,29 +176,29 @@ export default function PartnersPage() {
   }
 
   // ===== 客户展开：常买 + 专属价 + 未清单据 =====
-  const [expandCache, setExpandCache] = useState<Record<number, { frequent: FrequentItem[]; prices: PriceRule[]; unpaid: UnpaidOrder[] } | 'loading'>>({})
+  const [expandCache, setExpandCache] = useState<Record<number, { frequent: FrequentItem[]; prices: PriceRule[]; unpaid: UnpaidOrder[] } | { error: string } | 'loading'>>({})
   const loadExpand = (id: number, force = false) => {
     if (!force && expandCache[id]) return
     setExpandCache((p) => ({ ...p, [id]: 'loading' }))
     Promise.all([
-      api.get<FrequentItem[]>(`/customers/${id}/frequent`).catch(() => []),
-      api.get<PriceRule[]>(`/customers/${id}/prices`).catch(() => []),
-      api.get<{ list: UnpaidOrder[] }>('/orders', { customerId: id, unpaidOnly: 1, pageSize: 50 }).then((d) => d.list).catch(() => []),
+      api.get<FrequentItem[]>(`/customers/${id}/frequent`),
+      api.get<PriceRule[]>(`/customers/${id}/prices`),
+      fetchAllPages<UnpaidOrder>('/orders', { customerId: id, unpaidOnly: 1 }),
     ]).then(([frequent, prices, unpaid]) => setExpandCache((p) => ({ ...p, [id]: { frequent, prices, unpaid } })))
+      .catch((e) => setExpandCache((p) => ({ ...p, [id]: { error: (e as Error).message } })))
   }
 
   // 专属价可写：设价用的 SKU 选项（仅客户 tab 需要，懒拉一次）
   const [skuOpts, setSkuOpts] = useState<SkuOpt[]>([])
   const ensureSkuOpts = () => {
     if (skuOpts.length) return
-    api
-      .get<{ list: { name: string; skus: { id: number; specText: string }[] }[] }>('/products', { pageSize: 500 })
+    fetchAllPages<{ name: string; skus: { id: number; specText: string }[] }>('/products')
       .then((d) => {
         const opts: SkuOpt[] = []
-        for (const p of d.list) for (const s of p.skus) opts.push({ skuId: s.id, label: `${p.name}${s.specText ? ` ${s.specText}` : ''}` })
+        for (const p of d) for (const s of p.skus) opts.push({ skuId: s.id, label: `${p.name}${s.specText ? ` ${s.specText}` : ''}` })
         setSkuOpts(opts)
       })
-      .catch(() => {})
+      .catch((e) => message.error((e as Error).message))
   }
 
   // 设专属价 Modal
@@ -286,6 +295,7 @@ export default function PartnersPage() {
   const renderExpand = (p: Partner) => {
     const c = expandCache[p.id]
     if (!c || c === 'loading') return <Skeleton active paragraph={{ rows: 2 }} />
+    if ('error' in c) return <Alert type="error" showIcon message={c.error} action={<Button onClick={() => loadExpand(p.id, true)}>重试</Button>} />
     return (
       <div style={{ padding: '4px 8px 8px 48px', display: 'flex', gap: 40, flexWrap: 'wrap' }}>
         {c.unpaid.length > 0 && (
@@ -411,6 +421,7 @@ export default function PartnersPage() {
         </Button>
       </div>
 
+      {loadError && <Alert type="error" showIcon message={loadError} action={<Button onClick={load}>重试</Button>} />}
       {owedCount > 0 && (
         <div
           style={{
@@ -423,6 +434,7 @@ export default function PartnersPage() {
           }}
         >
           <Typography.Text>
+            {keyword && t('筛选结果：', 'Filtered results: ')}
             {isCustomer ? t('共 ', '') : t('欠 ', '')}
             <b style={{ color: T.error }}>{owedCount}</b>
             {isCustomer
@@ -445,7 +457,7 @@ export default function PartnersPage() {
       )}
 
       <div style={{ ...cardStyle, padding: '8px 16px 16px', overflow: 'hidden' }}>
-        <Table<Partner>
+        {!loadError && <Table<Partner>
           rowKey="id"
           columns={columns}
           dataSource={rows}
@@ -469,7 +481,7 @@ export default function PartnersPage() {
               isCustomer ? t(`共 ${n} 个客户`, `${n} customers`) : t(`共 ${n} 个供应商`, `${n} suppliers`),
           }}
           scroll={{ x: 720 }}
-        />
+        />}
       </div>
 
       <Modal
