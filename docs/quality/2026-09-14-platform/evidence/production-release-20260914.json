@@ -1,0 +1,146 @@
+{
+  "status": "deployed-and-verified",
+  "verifiedAt": "2026-09-14T13:57:48.222371+00:00",
+  "release": {
+    "commit": "a5d10f376a7c6d680ebe456bae961690cb212995",
+    "remote": "/opt/stockmate/releases/a5d10f376a7c-20260914"
+  },
+  "tests": {
+    "server": {
+      "passed": 351,
+      "failed": 0,
+      "skipped": 0
+    },
+    "web": {
+      "passed": 174,
+      "failed": 0
+    },
+    "productionBuild": "passed"
+  },
+  "migration": {
+    "status": "committed",
+    "oldBusinessTables": 26,
+    "oldValuesAndTypesPreserved": true,
+    "oldSequencePreserved": true,
+    "newTables": [
+      "AiRequestRecord",
+      "AppleAuthAttempt",
+      "AppleNotification",
+      "EntryConfirmation",
+      "PhoneIdentity",
+      "PlatformAdmin",
+      "PlatformAudit",
+      "PlatformEvent",
+      "PromoBatch",
+      "PromoCode",
+      "SmsChallenge",
+      "SmsRateBucket",
+      "SmsReauth",
+      "TradeEvent",
+      "WebAccessGrant",
+      "WebLoginChallenge",
+      "WebLoginCode"
+    ],
+    "integrity": "ok",
+    "newForeignKeyViolations": 0,
+    "exactTargetStructure": true,
+    "sqlSha256": "1661ace91afa25be5ec51b727b8500013fffaefe878839009563dbf0df189d73",
+    "backupSha256": "741643dade93463eea6fc0a9f3c1980c9a2787ced28919eba2993b02870cf974",
+    "backupPath": "/opt/stockmate/backups/releases/a5d10f376a7c-20260914/prod.db",
+    "serviceStarted": false,
+    "externalApiCalls": 0
+  },
+  "backup": {
+    "archiveSha256": "1d40bf5a940593038eb4cc797f99969529e4d928fa61c773931622ff8413a2d0",
+    "uploadsFiles": 0,
+    "uploadsArchiveReadbackVerified": true,
+    "webFiles": 50,
+    "webArchiveReadbackVerified": true
+  },
+  "sourceCheck": {
+    "sourceFilesSha256Matched": 89,
+    "originalEnvironmentPreserved": true,
+    "pm2Online": true,
+    "activeProductionDatabaseVerified": true
+  },
+  "publicHTTP": {
+    "health": 200,
+    "platformLogin": 200,
+    "/platform/auth/profile": 200,
+    "/platform/overview": 200,
+    "/platform/users": 200,
+    "/platform/ai-requests": 200,
+    "/platform/promo-codes": 200,
+    "/platform/audit": 200,
+    "/platform/overviewUnauthenticated": 401,
+    "/platform/promo-codesUnauthenticated": 401,
+    "platformTokenCannotAccessMerchant": 401,
+    "platformTokenCannotRedeem": 401,
+    "/auth/apple/capabilities": {
+      "http": 200,
+      "capabilities": {
+        "enabled": true,
+        "twoPhase": true,
+        "version": 1,
+        "registrationEnabled": true,
+        "nonceMode": "plain",
+        "challengeExpiresIn": 300,
+        "registrationExpiresIn": 300,
+        "legacyOauthAutoRegistration": true
+      }
+    },
+    "/auth/web-login/capabilities": {
+      "http": 200,
+      "capabilities": {
+        "enabled": true,
+        "version": 1,
+        "qrEnabled": true,
+        "codeEnabled": true,
+        "expiresIn": 120,
+        "pollAfter": 2
+      }
+    },
+    "/auth/sms/capabilities": {
+      "http": 200,
+      "capabilities": {
+        "enabled": false,
+        "registrationEnabled": true,
+        "countryCode": "86",
+        "codeLength": 6,
+        "expiresIn": 300,
+        "resendAfter": 60,
+        "bindingEnabled": true,
+        "rebindingEnabled": false
+      }
+    },
+    "staticFilesSha256Matched": 50,
+    "historyFallback": true,
+    "existingUserDetailReadOnly": true
+  },
+  "browser": {
+    "passed": true,
+    "origin": "https://qxju.shop/mate/platform",
+    "realFormLogin": true,
+    "overview": true,
+    "users": true,
+    "ai": true,
+    "experienceConsole": true,
+    "logout": true,
+    "pageErrors": 0,
+    "redemptionRequests": 0,
+    "codesGenerated": 0,
+    "externalProviderCalls": 0
+  },
+  "privateScreenshotHashes": {
+    "production-platform-overview.private.png": "f97d691dc6d9be9911de7f22e0beb4beeec4bc3504ffbc0ecea3f34f788e6c62",
+    "production-page-diagnostic.png": "34924e1180404d58e7824aac8bbb99b75290f984a95c4503a1737e7c7f855b38",
+    "production-experience-console.private.png": "298e55aecc835b10a35c280371f02afd1d5fdfb3cbf60e1828a05327190124ca",
+    "production-platform-login.png": "c406d3ede2cd968a8e2913e511d60bc5d36ff60c0f1bd1433292f919b669ea0d"
+  },
+  "limits": [
+    "No production merchant redemption/subscription changes",
+    "No SMS Send/Check, Apple purchase or AI requests",
+    "No App changes/build; no local service restarts",
+    "Production rollback not executed; backup archive readback verified"
+  ]
+}
